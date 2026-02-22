@@ -1,0 +1,5 @@
+{
+  "name": "Midas Rent a Car - Sistema Administrativo",
+  "description": "Uma plataforma completa para gestão de frotas, clientes e reservas para locadoras de veículos, com painel de métricas, controle de inventário e geração de vouchers.",
+  "requestFramePermissions": []
+}
