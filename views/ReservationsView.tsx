@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Reservation, ReservationStatus } from '../types';
+import { reservationSchema } from '../schemas/reservation.schema';
 import { TableSkeleton } from '../components/LoadingSkeleton';
 import toast from 'react-hot-toast';
 
@@ -258,12 +259,40 @@ const EditReservationModal: React.FC<EditReservationModalProps> = ({ reservation
       return;
     }
 
+    // Calcular dias e preparar dados para validação
+    const pickup = new Date(formData.pickup_date);
+    const returnD = new Date(formData.return_date);
+    const diffTime = Math.abs(returnD.getTime() - pickup.getTime());
+    const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+
+    const dataToValidate = {
+      client_id: reservation.client_id,
+      vehicle_id: reservation.vehicle_id,
+      pickup_date: new Date(formData.pickup_date).toISOString(),
+      return_date: new Date(formData.return_date).toISOString(),
+      daily_rate: formData.daily_rate,
+      security_deposit: reservation.security_deposit,
+      insurance_value: reservation.insurance_value,
+      additional_services: reservation.additional_services,
+      status: formData.status,
+      days,
+      total_value: formData.total_value
+    };
+
+    const validation = reservationSchema.safeParse(dataToValidate);
+
+    if (!validation.success) {
+      const firstError = validation.error.issues[0];
+      toast.error(`${String(firstError.path[0])}: ${firstError.message}`);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await onUpdate(reservation.id, {
         status: formData.status as ReservationStatus,
-        pickup_date: new Date(formData.pickup_date).toISOString(),
-        return_date: new Date(formData.return_date).toISOString(),
+        pickup_date: dataToValidate.pickup_date,
+        return_date: dataToValidate.return_date,
         daily_rate: formData.daily_rate,
         total_value: formData.total_value,
         observations: formData.observations

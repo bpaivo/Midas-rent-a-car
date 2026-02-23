@@ -1,7 +1,7 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import * as React from 'react';
 
 interface Props {
-    children: ReactNode;
+    children: React.ReactNode;
 }
 
 interface State {
@@ -9,18 +9,21 @@ interface State {
     error: Error | null;
 }
 
-class ErrorBoundary extends Component<Props, State> {
-    public state: State = {
-        hasError: false,
-        error: null
-    };
+class ErrorBoundary extends React.Component<Props, State> {
+    constructor(props: Props) {
+        super(props);
+        this.state = {
+            hasError: false,
+            error: null
+        };
+    }
 
     public static getDerivedStateFromError(error: Error): State {
         return { hasError: true, error };
     }
 
-    public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-        console.error('Uncaught error:', error, errorInfo);
+    public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+        console.error('ErrorBoundary caught an error:', error, errorInfo);
     }
 
     public render() {
@@ -34,9 +37,9 @@ class ErrorBoundary extends Component<Props, State> {
                             Ocorreu um erro inesperado no sistema. Recarregue a página ou entre em contato com o suporte.
                         </p>
                         <div className="bg-rose-50 dark:bg-rose-900/10 p-4 rounded-lg text-left mb-6 overflow-x-auto">
-                            <code className="text-xs text-rose-600 dark:text-rose-400 font-mono">
-                                {this.state.error?.message}
-                            </code>
+                            <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                                Detalhes do erro foram registrados no console do navegador para análise técnica.
+                            </p>
                         </div>
                         <button
                             onClick={() => window.location.reload()}
