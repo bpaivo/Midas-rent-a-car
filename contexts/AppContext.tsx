@@ -12,7 +12,7 @@ interface AppContextType {
     logout: () => Promise<void>;
 }
 
-const AppContext = createContext<AppContextType | undefined>(undefined);
+export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<any>(null);
@@ -40,17 +40,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         getInitialSession();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            console.log(`[AppContext] Auth Event: ${event}`, { hasSession: !!session });
-            setSession(session);
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+            console.log(`[AppContext] Auth Event: ${event}`, { hasSession: !!currentSession });
+            setSession(currentSession);
 
-            if (session) {
+            if (currentSession) {
                 console.log('[AppContext] Buscando perfil do usuário...');
                 try {
                     const { data, error } = await supabase
                         .from('profiles')
                         .select('*')
-                        .eq('id', session.user.id)
+                        .eq('id', currentSession.user.id)
                         .single();
 
                     if (error) {
@@ -115,10 +115,5 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
 };
 
-export const useApp = () => {
-    const context = useContext(AppContext);
-    if (!context) {
-        throw new Error('useApp must be used within AppProvider');
-    }
-    return context;
-};
+
+export type { AppContextType };

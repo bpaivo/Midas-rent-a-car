@@ -4,7 +4,7 @@ import { supabase } from './lib/supabase';
 import { Client, Vehicle, Reservation } from './types';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
-import { useApp } from './contexts/AppContext';
+import { useApp } from './hooks/useApp';
 import ErrorBoundary from './components/ErrorBoundary';
 import { retryAsync } from './utils/retry';
 
@@ -30,16 +30,18 @@ const App: React.FC = () => {
 
   // Data States
   const [isLoading, setIsLoading] = useState(true);
+  const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
 
-  // Fetch Data when session exists
+  // Fetch Data when session exists - Dependency narrowed to user.id
   useEffect(() => {
-    if (session) {
+    if (session?.user?.id) {
+      console.log('[App] Sessão detectada para usuário:', session.user.id);
       fetchData();
     }
-  }, [session]);
+  }, [session?.user?.id]);
 
   const fetchClients = async () => {
     try {
@@ -98,10 +100,9 @@ const App: React.FC = () => {
 
   const fetchData = async (isManualRefresh = false) => {
     // Só mostramos o loading global se for a primeira carga ou um refresh manual
-    const isFirstLoad = clients.length === 0 && vehicles.length === 0 && reservations.length === 0;
-
-    if (!isFirstLoad && !isManualRefresh) {
-      // Se não for a primeira carga, buscamos em background sem disparar o spinner
+    if (hasInitialLoaded && !isManualRefresh) {
+      // Se já carregou uma vez e não é refresh manual, busca em background
+      console.log('[App] Atualizando dados em background...');
       try {
         await Promise.all([
           fetchClients(),
@@ -116,11 +117,13 @@ const App: React.FC = () => {
 
     setIsLoading(true);
     try {
+      console.log('[App] Executando carga inicial de dados...');
       await Promise.all([
         fetchClients(),
         fetchVehicles(),
         fetchReservations()
       ]);
+      setHasInitialLoaded(true);
     } finally {
       setIsLoading(false);
     }
