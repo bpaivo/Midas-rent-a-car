@@ -3,6 +3,7 @@ import { Vehicle } from '../types';
 import { vehicleSchema } from '../schemas/vehicle.schema';
 import toast from 'react-hot-toast';
 import { TableSkeleton } from '../components/LoadingSkeleton';
+import { supabase } from '../lib/supabase';
 
 interface VehiclesViewProps {
   vehicles: Vehicle[];
@@ -54,13 +55,12 @@ const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, onAddVehicle, onU
   };
 
   const uploadFile = async (file: File) => {
-    const { supabase } = await import('../lib/supabase');
     const fileExt = file.name.split('.').pop();
     const fileName = `${crypto.randomUUID()}.${fileExt}`;
     const filePath = `vehicles/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
-      .from('clients-docs') // Usando o mesmo bucket por simplicidade, mas em pastas diferentes
+      .from('clients-docs')
       .upload(filePath, file);
 
     if (uploadError) throw uploadError;
