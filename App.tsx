@@ -44,12 +44,9 @@ const App: React.FC = () => {
 
   const fetchClients = async () => {
     try {
-      const data = await retryAsync(async () => {
-        const { data, error } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
-        if (error) throw error;
-        return data;
-      });
-      if (data) setClients(data);
+      const { data, error } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      setClients(data || []);
     } catch (error) {
       console.error('Error fetching clients:', error);
     }
@@ -57,12 +54,9 @@ const App: React.FC = () => {
 
   const fetchVehicles = async () => {
     try {
-      const data = await retryAsync(async () => {
-        const { data, error } = await supabase.from('vehicles').select('*').order('model', { ascending: true });
-        if (error) throw error;
-        return data;
-      });
-      if (data) setVehicles(data);
+      const { data, error } = await supabase.from('vehicles').select('*').order('model', { ascending: true });
+      if (error) throw error;
+      setVehicles(data || []);
     } catch (error) {
       console.error('Error fetching vehicles:', error);
     }
@@ -70,14 +64,11 @@ const App: React.FC = () => {
 
   const fetchReservations = async () => {
     try {
-      const data = await retryAsync(async () => {
-        const { data, error } = await supabase
-          .from('reservations')
-          .select('*, clients(name), vehicles(model, plate)')
-          .order('created_at', { ascending: false });
-        if (error) throw error;
-        return data;
-      });
+      const { data, error } = await supabase
+        .from('reservations')
+        .select('*, clients(name), vehicles(model, plate)')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
 
       if (data) {
         const transformed: Reservation[] = data.map((r: any) => ({
@@ -101,22 +92,12 @@ const App: React.FC = () => {
     }
 
     setIsLoading(true);
-    
-    // Timeout de segurança para o carregamento de dados
-    const dataTimeout = setTimeout(() => {
-      if (isLoading) {
-        setIsLoading(false);
-        setHasInitialLoaded(true);
-      }
-    }, 8000);
-
     try {
       await Promise.all([fetchClients(), fetchVehicles(), fetchReservations()]);
       setHasInitialLoaded(true);
     } catch (error) {
       console.error('Erro na carga inicial:', error);
     } finally {
-      clearTimeout(dataTimeout);
       setIsLoading(false);
     }
   };
@@ -179,14 +160,14 @@ const App: React.FC = () => {
                     clients={clients}
                     isLoading={isLoading}
                     onAddClient={async (c) => {
-                      const { data, error } = await supabase.from('clients').insert([c]).select().single();
+                      const { data, error } = await supabase.from('clients').insert([c]).select();
                       if (error) throw error;
-                      if (data) setClients(prev => [data, ...prev]);
+                      if (data && data[0]) setClients(prev => [data[0], ...prev]);
                     }}
                     onUpdateClient={async (id, c) => {
-                      const { data, error } = await supabase.from('clients').update(c).eq('id', id).select().single();
+                      const { data, error } = await supabase.from('clients').update(c).eq('id', id).select();
                       if (error) throw error;
-                      if (data) setClients(prev => prev.map(item => item.id === id ? data : item));
+                      if (data && data[0]) setClients(prev => prev.map(item => item.id === id ? data[0] : item));
                     }}
                     onDeleteClient={async (id) => {
                       const { error } = await supabase.from('clients').update({ status: 'Pendente' }).eq('id', id);
@@ -200,14 +181,14 @@ const App: React.FC = () => {
                     vehicles={vehicles}
                     isLoading={isLoading}
                     onAddVehicle={async (v) => {
-                      const { data, error } = await supabase.from('vehicles').insert(v).select().single();
+                      const { data, error } = await supabase.from('vehicles').insert([v]).select();
                       if (error) throw error;
-                      if (data) setVehicles(prev => [data, ...prev]);
+                      if (data && data[0]) setVehicles(prev => [data[0], ...prev]);
                     }}
                     onUpdateVehicle={async (id, v) => {
-                      const { data, error } = await supabase.from('vehicles').update(v).eq('id', id).select().single();
+                      const { data, error } = await supabase.from('vehicles').update(v).eq('id', id).select();
                       if (error) throw error;
-                      if (data) setVehicles(prev => prev.map(item => item.id === id ? data : item));
+                      if (data && data[0]) setVehicles(prev => prev.map(item => item.id === id ? data[0] : item));
                     }}
                     onDeleteVehicle={async (id) => {
                       const { error } = await supabase.from('vehicles').update({ status: 'Desativado' }).eq('id', id);
@@ -226,16 +207,15 @@ const App: React.FC = () => {
                         .from('reservations')
                         .update(updates)
                         .eq('id', id)
-                        .select('*, clients(name), vehicles(model, plate)')
-                        .single();
+                        .select('*, clients(name), vehicles(model, plate)');
                       if (error) throw error;
-                      if (data) {
+                      if (data && data[0]) {
                         const transformed = {
-                          ...data,
-                          clientName: data.clients?.name || 'N/A',
-                          vehicleModel: data.vehicles?.model || 'N/A',
-                          vehiclePlate: data.vehicles?.plate || 'N/A',
-                          dateStr: new Date(data.created_at).toLocaleDateString('pt-BR')
+                          ...data[0],
+                          clientName: data[0].clients?.name || 'N/A',
+                          vehicleModel: data[0].vehicles?.model || 'N/A',
+                          vehiclePlate: data[0].vehicles?.plate || 'N/A',
+                          dateStr: new Date(data[0].created_at).toLocaleDateString('pt-BR')
                         };
                         setReservations(prev => prev.map(item => item.id === id ? transformed : item));
                       }
@@ -244,16 +224,15 @@ const App: React.FC = () => {
                       const { data, error } = await supabase
                         .from('reservations')
                         .insert([r])
-                        .select('*, clients(name), vehicles(model, plate)')
-                        .single();
+                        .select('*, clients(name), vehicles(model, plate)');
                       if (error) throw error;
-                      if (data) {
+                      if (data && data[0]) {
                         const transformed = {
-                          ...data,
-                          clientName: data.clients?.name || 'N/A',
-                          vehicleModel: data.vehicles?.model || 'N/A',
-                          vehiclePlate: data.vehicles?.plate || 'N/A',
-                          dateStr: new Date(data.created_at).toLocaleDateString('pt-BR')
+                          ...data[0],
+                          clientName: data[0].clients?.name || 'N/A',
+                          vehicleModel: data[0].vehicles?.model || 'N/A',
+                          vehiclePlate: data[0].vehicles?.plate || 'N/A',
+                          dateStr: new Date(data[0].created_at).toLocaleDateString('pt-BR')
                         };
                         setReservations(prev => [transformed, ...prev]);
                       }
@@ -288,16 +267,15 @@ const App: React.FC = () => {
                   const { data, error } = await supabase
                     .from('reservations')
                     .insert([r])
-                    .select('*, clients(name), vehicles(model, plate)')
-                    .single();
+                    .select('*, clients(name), vehicles(model, plate)');
                   if (error) throw error;
-                  if (data) {
+                  if (data && data[0]) {
                     const transformed = {
-                      ...data,
-                      clientName: data.clients?.name || 'N/A',
-                      vehicleModel: data.vehicles?.model || 'N/A',
-                      vehiclePlate: data.vehicles?.plate || 'N/A',
-                      dateStr: new Date(data.created_at).toLocaleDateString('pt-BR')
+                      ...data[0],
+                      clientName: data[0].clients?.name || 'N/A',
+                      vehicleModel: data[0].vehicles?.model || 'N/A',
+                      vehiclePlate: data[0].vehicles?.plate || 'N/A',
+                      dateStr: new Date(data[0].created_at).toLocaleDateString('pt-BR')
                     };
                     setReservations(prev => [transformed, ...prev]);
                     toast.success('Reserva confirmada!');

@@ -85,6 +85,14 @@ const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, onAddVehicle, onU
     setIsSubmitting(true);
     const loadingToast = toast.loading('Salvando veículo...');
 
+    // Timeout de segurança de 10 segundos
+    const safetyTimeout = setTimeout(() => {
+      if (isSubmitting) {
+        setIsSubmitting(false);
+        toast.error('O servidor demorou muito para responder. Tente novamente.', { id: loadingToast });
+      }
+    }, 10000);
+
     try {
       const finalData = { ...formData };
       if (attachedImage) {
@@ -96,11 +104,14 @@ const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, onAddVehicle, onU
       } else {
         await onAddVehicle(finalData);
       }
+      
+      clearTimeout(safetyTimeout);
       toast.success('Veículo salvo com sucesso!', { id: loadingToast });
       handleCloseModal();
     } catch (err: any) {
+      clearTimeout(safetyTimeout);
       console.error("Erro ao salvar veículo:", err);
-      toast.error('Erro ao salvar veículo.', { id: loadingToast });
+      toast.error('Erro ao salvar veículo: ' + (err.message || 'Falha na conexão'), { id: loadingToast });
     } finally {
       setIsSubmitting(false);
     }
