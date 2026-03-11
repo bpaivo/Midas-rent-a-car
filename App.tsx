@@ -101,12 +101,22 @@ const App: React.FC = () => {
     }
 
     setIsLoading(true);
+    
+    // Timeout de segurança para o carregamento de dados
+    const dataTimeout = setTimeout(() => {
+      if (isLoading) {
+        setIsLoading(false);
+        setHasInitialLoaded(true);
+      }
+    }, 8000);
+
     try {
       await Promise.all([fetchClients(), fetchVehicles(), fetchReservations()]);
       setHasInitialLoaded(true);
     } catch (error) {
-      toast.error('Erro na carga inicial do sistema.');
+      console.error('Erro na carga inicial:', error);
     } finally {
+      clearTimeout(dataTimeout);
       setIsLoading(false);
     }
   };
@@ -114,7 +124,10 @@ const App: React.FC = () => {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center">
-        <span className="animate-spin material-symbols-outlined text-4xl text-primary">progress_activity</span>
+        <div className="flex flex-col items-center gap-4">
+          <span className="animate-spin material-symbols-outlined text-5xl text-primary">progress_activity</span>
+          <p className="text-primary/60 font-bold animate-pulse">Iniciando Midas...</p>
+        </div>
       </div>
     );
   }
@@ -133,7 +146,11 @@ const App: React.FC = () => {
     <>
       <Toaster position="top-right" />
       <Router>
-        <React.Suspense fallback={null}>
+        <React.Suspense fallback={
+          <div className="h-full w-full flex items-center justify-center">
+            <span className="animate-spin material-symbols-outlined text-3xl text-primary/20">progress_activity</span>
+          </div>
+        }>
           <Layout
             onLogout={logout}
             isDarkMode={isDarkMode}
