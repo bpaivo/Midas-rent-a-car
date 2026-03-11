@@ -31,3 +31,4 @@ brain/
 *.njsproj
 *.sln
 *.sw?
+.dyad/
