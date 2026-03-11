@@ -98,7 +98,21 @@ const App: React.FC = () => {
   useEffect(() => {
     if (session?.user?.id) {
       fetchData();
+    } else {
+      setIsLoading(false);
     }
+  }, [session?.user?.id, fetchData]);
+
+  // Atualizar dados quando a aba ganhar foco
+  useEffect(() => {
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible' && session?.user?.id) {
+        console.log('[App] Aba focada, atualizando dados...');
+        fetchData();
+      }
+    };
+    document.addEventListener('visibilitychange', handleFocus);
+    return () => document.removeEventListener('visibilitychange', handleFocus);
   }, [session?.user?.id, fetchData]);
 
   if (authLoading) {
