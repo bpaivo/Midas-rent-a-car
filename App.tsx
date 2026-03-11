@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { Client, Vehicle, Reservation } from './types';
@@ -6,7 +6,6 @@ import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 import { useApp } from './hooks/useApp';
 import ErrorBoundary from './components/ErrorBoundary';
-import { retryAsync } from './utils/retry';
 
 // Lazy Views
 const Login = React.lazy(() => import('./views/Login'));
@@ -30,51 +29,42 @@ const App: React.FC = () => {
 
   // Data States
   const [isLoading, setIsLoading] = useState(true);
-  const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
 
-  // Fetch Data when session exists
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchData();
-    }
-  }, [session?.user?.id]);
+  const fetchData = useCallback(async (isManual = false) => {
+    if (!session?.user?.id) return;
+    
+    if (isManual) toast.loading('Sincronizando dados...', { id: 'sync' });
+    setIsLoading(true);
 
-  const fetchClients = async () => {
+    // Timeout de segurança: se em 8 segundos não carregar, libera a interface
+    const safetyTimeout = setTimeout(() => {
+      setIsLoading(false);
+      if (isManual) toast.error('A sincronização está demorando mais que o esperado.', { id: 'sync' });
+    }, 8000);
+
     try {
-      const { data, error } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      setClients(data || []);
-      return data;
-    } catch (error: any) {
-      console.error('Error fetching clients:', error);
-      toast.error('Erro ao carregar clientes: ' + error.message);
-    }
-  };
+      console.log('[App] Iniciando busca de dados...');
+      
+      // Buscas individuais para evitar que um erro em uma tabela trave todas
+      const [clientsRes, vehiclesRes, reservationsRes] = await Promise.allSettled([
+        supabase.from('clients').select('*').order('created_at', { ascending: false }),
+        supabase.from('vehicles').select('*').order('model', { ascending: true }),
+        supabase.from('reservations').select('*, clients(name), vehicles(model, plate)').order('created_at', { ascending: false })
+      ]);
 
-  const fetchVehicles = async () => {
-    try {
-      const { data, error } = await supabase.from('vehicles').select('*').order('model', { ascending: true });
-      if (error) throw error;
-      setVehicles(data || []);
-      return data;
-    } catch (error: any) {
-      console.error('Error fetching vehicles:', error);
-      toast.error('Erro ao carregar veículos: ' + error.message);
-    }
-  };
+      if (clientsRes.status === 'fulfilled' && !clientsRes.value.error) {
+        setClients(clientsRes.value.data || []);
+      }
 
-  const fetchReservations = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('reservations')
-        .select('*, clients(name), vehicles(model, plate)')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+      if (vehiclesRes.status === 'fulfilled' && !vehiclesRes.value.error) {
+        setVehicles(vehiclesRes.value.data || []);
+      }
 
-      if (data) {
+      if (reservationsRes.status === 'fulfilled' && !reservationsRes.value.error) {
+        const data = reservationsRes.value.data || [];
         const transformed: Reservation[] = data.map((r: any) => ({
           ...r,
           clientName: r.clients?.name || 'N/A',
@@ -83,35 +73,24 @@ const App: React.FC = () => {
           dateStr: new Date(r.created_at).toLocaleDateString('pt-BR')
         }));
         setReservations(transformed);
-        return transformed;
       }
-    } catch (error: any) {
-      console.error('Error fetching reservations:', error);
-      toast.error('Erro ao carregar reservas: ' + error.message);
-    }
-  };
 
-  const fetchData = async (isManualRefresh = false) => {
-    if (hasInitialLoaded && !isManualRefresh) {
-      Promise.all([fetchClients(), fetchVehicles(), fetchReservations()]);
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      // Usando retryAsync para garantir que a conexão seja estabelecida
-      await retryAsync(async () => {
-        await Promise.all([fetchClients(), fetchVehicles(), fetchReservations()]);
-      }, 3, 1000);
-      
-      setHasInitialLoaded(true);
+      if (isManual) toast.success('Dados atualizados!', { id: 'sync' });
+      console.log('[App] Dados carregados com sucesso.');
     } catch (error) {
-      console.error('Erro crítico na carga inicial:', error);
-      toast.error('Falha na conexão com o banco de dados. Tente recarregar a página.');
+      console.error('[App] Erro ao carregar dados:', error);
+      if (isManual) toast.error('Falha na sincronização.', { id: 'sync' });
     } finally {
+      clearTimeout(safetyTimeout);
       setIsLoading(false);
     }
-  };
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetchData();
+    }
+  }, [session?.user?.id, fetchData]);
 
   if (authLoading) {
     return (
@@ -151,6 +130,15 @@ const App: React.FC = () => {
             onAddReservation={() => setIsReservationModalOpen(true)}
             onViewProfile={() => setIsProfileModalOpen(true)}
           >
+            {/* Botão de Sincronização Flutuante para Debug */}
+            <button 
+              onClick={() => fetchData(true)}
+              className="fixed bottom-6 right-6 z-50 size-12 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
+              title="Sincronizar com Banco de Dados"
+            >
+              <span className="material-symbols-outlined group-hover:rotate-180 transition-transform duration-500">sync</span>
+            </button>
+
             <ErrorBoundary>
               <Routes>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
