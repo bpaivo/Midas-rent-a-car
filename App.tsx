@@ -36,78 +36,62 @@ const App: React.FC = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
 
   const fetchData = useCallback(async (isManual = false) => {
-    if (!session?.user?.id) {
-      console.log('[App] Sem sessão ativa, abortando busca de dados.');
-      return;
-    }
+    if (!session?.user?.id) return;
     
     if (isManual) toast.loading('Sincronizando dados...', { id: 'sync' });
     setIsLoading(true);
 
-    console.log('[App] Iniciando busca de dados no Supabase...');
+    console.log('[App] Iniciando sincronização definitiva...');
 
     try {
-      // Buscas individuais para máxima resiliência
-      const clientsPromise = supabase.from('clients').select('*').order('created_at', { ascending: false });
-      const vehiclesPromise = supabase.from('vehicles').select('*').order('model', { ascending: true });
-      const reservationsPromise = supabase.from('reservations').select('*, clients(name), vehicles(model, plate)').order('created_at', { ascending: false });
+      // 1. Buscar Clientes
+      const { data: clientsData, error: clientsErr } = await supabase
+        .from('clients')
+        .select('*')
+        .order('name', { ascending: true });
+      
+      if (clientsErr) console.error('[App] Erro Clientes:', clientsErr);
+      const currentClients = clientsData || [];
+      setClients(currentClients);
 
-      const [clientsRes, vehiclesRes, reservationsRes] = await Promise.allSettled([
-        clientsPromise,
-        vehiclesPromise,
-        reservationsPromise
-      ]);
+      // 2. Buscar Veículos
+      const { data: vehiclesData, error: vehiclesErr } = await supabase
+        .from('vehicles')
+        .select('*')
+        .order('model', { ascending: true });
+      
+      if (vehiclesErr) console.error('[App] Erro Veículos:', vehiclesErr);
+      const currentVehicles = vehiclesData || [];
+      setVehicles(currentVehicles);
 
-      // Processar Clientes
-      if (clientsRes.status === 'fulfilled') {
-        if (clientsRes.value.error) {
-          console.error('[App] Erro ao buscar clientes:', clientsRes.value.error);
-        } else {
-          const data = clientsRes.value.data || [];
-          console.log(`[App] ${data.length} clientes carregados:`, data);
-          setClients(data);
-        }
-      } else {
-        console.error('[App] Promessa de clientes rejeitada:', clientsRes.reason);
-      }
-
-      // Processar Veículos
-      if (vehiclesRes.status === 'fulfilled') {
-        if (vehiclesRes.value.error) {
-          console.error('[App] Erro ao buscar veículos:', vehiclesRes.value.error);
-        } else {
-          const data = vehiclesRes.value.data || [];
-          console.log(`[App] ${data.length} veículos carregados:`, data);
-          setVehicles(data);
-        }
-      } else {
-        console.error('[App] Promessa de veículos rejeitada:', vehiclesRes.reason);
-      }
-
-      // Processar Reservas
-      if (reservationsRes.status === 'fulfilled') {
-        if (reservationsRes.value.error) {
-          console.error('[App] Erro ao buscar reservas:', reservationsRes.value.error);
-        } else {
-          const data = reservationsRes.value.data || [];
-          console.log(`[App] ${data.length} reservas carregadas:`, data);
-          const transformed: Reservation[] = data.map((r: any) => ({
+      // 3. Buscar Reservas (Sem joins complexos para evitar erros de schema)
+      const { data: resData, error: resErr } = await supabase
+        .from('reservations')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (resErr) console.error('[App] Erro Reservas:', resErr);
+      
+      if (resData) {
+        // Cruzamento de dados em memória (mais seguro)
+        const transformed: Reservation[] = resData.map((r: any) => {
+          const client = currentClients.find(c => c.id === r.client_id);
+          const vehicle = currentVehicles.find(v => v.id === r.vehicle_id);
+          return {
             ...r,
-            clientName: r.clients?.name || 'N/A',
-            vehicleModel: r.vehicles?.model || 'N/A',
-            vehiclePlate: r.vehicles?.plate || 'N/A',
+            clientName: client?.name || 'Cliente não encontrado',
+            vehicleModel: vehicle?.model || 'Veículo não encontrado',
+            vehiclePlate: vehicle?.plate || '---',
             dateStr: new Date(r.created_at).toLocaleDateString('pt-BR')
-          }));
-          setReservations(transformed);
-        }
-      } else {
-        console.error('[App] Promessa de reservas rejeitada:', reservationsRes.reason);
+          };
+        });
+        setReservations(transformed);
       }
 
-      if (isManual) toast.success('Dados sincronizados!', { id: 'sync' });
+      if (isManual) toast.success('Dados carregados!', { id: 'sync' });
     } catch (error) {
-      console.error('[App] Erro inesperado ao carregar dados:', error);
-      if (isManual) toast.error('Erro na sincronização.', { id: 'sync' });
+      console.error('[App] Erro fatal no carregamento:', error);
+      if (isManual) toast.error('Erro ao conectar com o banco.');
     } finally {
       setIsLoading(false);
     }
@@ -157,11 +141,10 @@ const App: React.FC = () => {
             onAddReservation={() => setIsReservationModalOpen(true)}
             onViewProfile={() => setIsProfileModalOpen(true)}
           >
-            {/* Botão de Sincronização Flutuante */}
+            {/* Botão de Sincronização Manual */}
             <button 
               onClick={() => fetchData(true)}
               className="fixed bottom-6 right-6 z-50 size-12 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
-              title="Sincronizar com Banco de Dados"
             >
               <span className="material-symbols-outlined group-hover:rotate-180 transition-transform duration-500">sync</span>
             </button>
@@ -233,14 +216,16 @@ const App: React.FC = () => {
                         .from('reservations')
                         .update(updates)
                         .eq('id', id)
-                        .select('*, clients(name), vehicles(model, plate)');
+                        .select('*');
                       if (error) throw error;
                       if (data && data[0]) {
+                        const client = clients.find(c => c.id === data[0].client_id);
+                        const vehicle = vehicles.find(v => v.id === data[0].vehicle_id);
                         const transformed = {
                           ...data[0],
-                          clientName: data[0].clients?.name || 'N/A',
-                          vehicleModel: data[0].vehicles?.model || 'N/A',
-                          vehiclePlate: data[0].vehicles?.plate || 'N/A',
+                          clientName: client?.name || 'N/A',
+                          vehicleModel: vehicle?.model || 'N/A',
+                          vehiclePlate: vehicle?.plate || 'N/A',
                           dateStr: new Date(data[0].created_at).toLocaleDateString('pt-BR')
                         };
                         setReservations(prev => prev.map(item => item.id === id ? transformed : item));
@@ -250,14 +235,16 @@ const App: React.FC = () => {
                       const { data, error } = await supabase
                         .from('reservations')
                         .insert([r])
-                        .select('*, clients(name), vehicles(model, plate)');
+                        .select('*');
                       if (error) throw error;
                       if (data && data[0]) {
+                        const client = clients.find(c => c.id === data[0].client_id);
+                        const vehicle = vehicles.find(v => v.id === data[0].vehicle_id);
                         const transformed = {
                           ...data[0],
-                          clientName: data[0].clients?.name || 'N/A',
-                          vehicleModel: data[0].vehicles?.model || 'N/A',
-                          vehiclePlate: data[0].vehicles?.plate || 'N/A',
+                          clientName: client?.name || 'N/A',
+                          vehicleModel: vehicle?.model || 'N/A',
+                          vehiclePlate: vehicle?.plate || 'N/A',
                           dateStr: new Date(data[0].created_at).toLocaleDateString('pt-BR')
                         };
                         setReservations(prev => [transformed, ...prev]);
@@ -293,14 +280,16 @@ const App: React.FC = () => {
                   const { data, error } = await supabase
                     .from('reservations')
                     .insert([r])
-                    .select('*, clients(name), vehicles(model, plate)');
+                    .select('*');
                   if (error) throw error;
                   if (data && data[0]) {
+                    const client = clients.find(c => c.id === data[0].client_id);
+                    const vehicle = vehicles.find(v => v.id === data[0].vehicle_id);
                     const transformed = {
                       ...data[0],
-                      clientName: data[0].clients?.name || 'N/A',
-                      vehicleModel: data[0].vehicles?.model || 'N/A',
-                      vehiclePlate: data[0].vehicles?.plate || 'N/A',
+                      clientName: client?.name || 'N/A',
+                      vehicleModel: vehicle?.model || 'N/A',
+                      vehiclePlate: vehicle?.plate || 'N/A',
                       dateStr: new Date(data[0].created_at).toLocaleDateString('pt-BR')
                     };
                     setReservations(prev => [transformed, ...prev]);
