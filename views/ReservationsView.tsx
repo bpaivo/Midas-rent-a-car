@@ -315,7 +315,7 @@ const EditReservationModal: React.FC<EditReservationModalProps> = ({ reservation
   const { days: currentDays, subtotal: currentSubtotal } = calculateTotals();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] animate-in fade-in zoom-in duration-300">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50 sticky top-0 z-10 backdrop-blur-md">
           <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">

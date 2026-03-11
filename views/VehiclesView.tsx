@@ -25,7 +25,9 @@ const initialState: Omit<Vehicle, 'id'> = {
   doors: 4,
   transmission: 'Manual',
   renavan: '',
-  chassis: ''
+  chassis: '',
+  default_security_deposit: 0,
+  default_insurance_value: 0
 };
 
 const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, onAddVehicle, onUpdateVehicle, onDeleteVehicle, isLoading }) => {
@@ -372,6 +374,26 @@ const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, onAddVehicle, onU
                       onChange={e => setFormData({ ...formData, doors: Number(e.target.value) })}
                     />
                   </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Caução Padrão (R$)</label>
+                  <input
+                    className="w-full h-12 rounded-lg border-gray-200 dark:border-gray-800 dark:bg-background-dark focus:ring-primary focus:border-primary text-slate-900 dark:text-white p-3"
+                    type="number"
+                    required
+                    value={formData.default_security_deposit}
+                    onChange={e => setFormData({ ...formData, default_security_deposit: Number(e.target.value) })}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Seguro Padrão (Total R$)</label>
+                  <input
+                    className="w-full h-12 rounded-lg border-gray-200 dark:border-gray-800 dark:bg-background-dark focus:ring-primary focus:border-primary text-slate-900 dark:text-white p-3"
+                    type="number"
+                    required
+                    value={formData.default_insurance_value}
+                    onChange={e => setFormData({ ...formData, default_insurance_value: Number(e.target.value) })}
+                  />
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 dark:border-gray-800">

@@ -10,8 +10,26 @@ interface ReservationModalProps {
     clients: Client[];
     vehicles: Vehicle[];
     onClose: () => void;
-    onSave: (reservation: Omit<Reservation, 'id' | 'clientName' | 'vehicleModel' | 'vehiclePlate' | 'dateStr'>) => Promise<void>;
+    onSave: (reservation: Omit<Reservation, 'id' | 'clientName' | 'vehicleModel' | 'vehiclePlate' | 'dateStr' | 'created_at'>) => Promise<void>;
 }
+
+const DISCOUNT_TIERS = [
+    { label: '1 diária', min: 1, max: 1, discount: 0 },
+    { label: '2 diárias', min: 2, max: 2, discount: 5 },
+    { label: '3 diárias', min: 3, max: 3, discount: 10 },
+    { label: '4 diárias', min: 4, max: 4, discount: 15 },
+    { label: '5 diárias', min: 5, max: 5, discount: 20 },
+    { label: '6-10 diárias', min: 6, max: 10, discount: 25 },
+    { label: '11-15 diárias', min: 11, max: 15, discount: 30 },
+    { label: 'Acima de 15', min: 16, max: 9999, discount: 35 },
+];
+
+const ADDITIONAL_SERVICES = [
+    { id: 'lavagem', name: 'Taxa de lavagem', price: 30.00, type: 'fixed' },
+    { id: 'km_livre', name: 'Km livre', price: 24.99, type: 'daily' },
+    { id: 'condutor', name: 'Condutor adicional', price: 24.99, type: 'daily' },
+    { id: 'locatario_jovem', name: 'Locatário Jovem', price: 29.79, type: 'daily' },
+];
 
 const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, onClose, onSave }) => {
     const [formData, setFormData] = useState({
@@ -19,12 +37,15 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
         vehicle_id: '',
         pickup_date: '',
         return_date: '',
-        daily_rate: 0,
+        base_rate: 0,
+        discount_percent: 0,
         security_deposit: 0,
         insurance_value: 0,
-        additional_services: '',
+        additional_services: '', // Mantido como string para o DB
         status: ReservationStatus.AGUARDANDO
     });
+    const [selectedServices, setSelectedServices] = useState<string[]>([]);
+    const [isManualDiscount, setIsManualDiscount] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [occupiedRanges, setOccupiedRanges] = useState<{ start: Date; end: Date }[]>([]);
     const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
@@ -78,8 +99,17 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
         let isAborted = { aborted: false };
 
         if (formData.vehicle_id) {
+            const vehicle = vehicles.find(v => v.id === formData.vehicle_id);
+            if (vehicle) {
+                setFormData(prev => ({
+                    ...prev,
+                    pickup_date: '',
+                    return_date: '',
+                    security_deposit: vehicle.default_security_deposit || 0,
+                    insurance_value: vehicle.default_insurance_value || 0
+                }));
+            }
             fetchAvailability(formData.vehicle_id, isAborted);
-            setFormData(prev => ({ ...prev, pickup_date: '', return_date: '' }));
         }
 
         return () => {
@@ -99,10 +129,13 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
         const returnD = new Date(formData.return_date);
         const diffTime = Math.abs(returnD.getTime() - pickup.getTime());
         const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-        const total_value = (formData.daily_rate * days) + formData.insurance_value;
+
+        const currentDailyRate = formData.base_rate * (1 - (formData.discount_percent / 100));
+        const total_value = (currentDailyRate * days) + formData.insurance_value;
 
         const dataToValidate = {
             ...formData,
+            daily_rate: currentDailyRate,
             days,
             total_value
         };
@@ -139,16 +172,44 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
     };
 
     const calculateTotals = () => {
-        if (!formData.pickup_date || !formData.return_date) return { days: 0, subtotal: 0 };
+        if (!formData.pickup_date || !formData.return_date) return { days: 0, subtotal: 0, suggestedDiscount: 0, currentTier: DISCOUNT_TIERS[0], servicesTotal: 0 };
         const pickup = new Date(formData.pickup_date);
         const returnD = new Date(formData.return_date);
         const diffTime = Math.abs(returnD.getTime() - pickup.getTime());
         const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-        const subtotal = days * formData.daily_rate;
-        return { days, subtotal };
+
+        const tier = DISCOUNT_TIERS.find(t => days >= t.min && days <= t.max) || DISCOUNT_TIERS[0];
+        const effectiveDiscount = isManualDiscount ? formData.discount_percent : tier.discount;
+
+        const dailyRate = formData.base_rate * (1 - (effectiveDiscount / 100));
+        let subtotal = days * dailyRate;
+
+        // Calcular serviços adicionais
+        let servicesTotal = 0;
+        selectedServices.forEach(serviceId => {
+            const service = ADDITIONAL_SERVICES.find(s => s.id === serviceId);
+            if (service) {
+                if (service.type === 'fixed') {
+                    servicesTotal += service.price;
+                } else {
+                    servicesTotal += service.price * days;
+                }
+            }
+        });
+
+        subtotal += servicesTotal;
+
+        return { days, subtotal, suggestedDiscount: tier.discount, currentTier: tier, servicesTotal };
     };
 
-    const { days: currentDays, subtotal: currentSubtotal } = calculateTotals();
+    const { days: currentDays, subtotal: currentSubtotal, suggestedDiscount, currentTier, servicesTotal } = calculateTotals();
+
+    // Atualizar desconto quando os dias mudam (se não for manual)
+    useEffect(() => {
+        if (!isManualDiscount && currentDays > 0) {
+            setFormData(prev => ({ ...prev, discount_percent: suggestedDiscount }));
+        }
+    }, [currentDays, suggestedDiscount, isManualDiscount]);
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -238,28 +299,98 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Valor da Diária (R$)</label>
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Base Diária (R$)</label>
                             <input
                                 type="number"
                                 required
                                 className="w-full h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all dark:text-white"
-                                value={formData.daily_rate}
-                                onChange={e => setFormData({ ...formData, daily_rate: Number(e.target.value) })}
+                                value={formData.base_rate}
+                                onChange={e => setFormData({ ...formData, base_rate: Number(e.target.value) })}
                             />
+                        </div>
+
+                        {/* Tabela de Descontos Progressivos */}
+                        <div className="col-span-1 md:col-span-2 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Tabela de Descontos Progressivos</label>
+                                <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">Descontos Automáticos</span>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {DISCOUNT_TIERS.map((tier) => {
+                                    const isCurrent = currentTier?.label === tier.label;
+                                    const pricePerDay = formData.base_rate * (1 - (tier.discount / 100));
+
+                                    return (
+                                        <div
+                                            key={tier.label}
+                                            className={`p-2 rounded-xl border transition-all ${isCurrent
+                                                ? 'bg-primary border-primary shadow-lg shadow-primary/20'
+                                                : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700'
+                                                }`}
+                                        >
+                                            <div className={`text-[9px] font-black uppercase ${isCurrent ? 'text-white/70' : 'text-slate-400'}`}>
+                                                {tier.label}
+                                            </div>
+                                            <div className={`text-xs font-bold ${isCurrent ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
+                                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pricePerDay)}
+                                            </div>
+                                            <div className={`text-[10px] font-bold ${isCurrent ? 'text-white' : 'text-emerald-500'}`}>
+                                                -{tier.discount}%
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         {/* Campos Informativos de Resumo */}
                         <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 space-y-1">
-                            <label className="text-[10px] font-black text-primary uppercase tracking-widest">Total de Diárias</label>
-                            <div className="text-lg font-bold text-slate-900 dark:text-white">
-                                {currentDays} {currentDays === 1 ? 'dia' : 'dias'}
+                            <label className="text-[10px] font-black text-primary uppercase tracking-widest">Resumo da Seleção</label>
+                            <div className="text-sm font-bold text-slate-900 dark:text-white">
+                                {currentDays} {currentDays === 1 ? 'dia' : 'dias'} selecionados
+                            </div>
+                            <div className="flex items-center gap-2 mt-2">
+                                <div className="flex-1">
+                                    <label className="text-[9px] text-slate-400 font-bold uppercase block">Desconto (%)</label>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="number"
+                                            className="w-16 h-8 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-2 text-xs font-bold dark:text-white"
+                                            value={formData.discount_percent}
+                                            onChange={e => {
+                                                setIsManualDiscount(true);
+                                                setFormData({ ...formData, discount_percent: Number(e.target.value) });
+                                            }}
+                                        />
+                                        {!isManualDiscount && <span className="text-[9px] bg-emerald-500/10 text-emerald-600 px-1.5 py-0.5 rounded font-black uppercase">Auto</span>}
+                                        {isManualDiscount && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsManualDiscount(false)}
+                                                className="text-[9px] text-primary hover:underline font-bold uppercase"
+                                            >
+                                                Reset
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10 space-y-1">
-                            <label className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Subtotal Diárias</label>
+                            <label className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Subtotal Final</label>
                             <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
                                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(currentSubtotal)}
+                            </div>
+                            <div className="flex flex-col gap-0.5">
+                                <span className="text-[10px] text-emerald-600/60 font-medium">
+                                    Diária efetiva: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((currentSubtotal - servicesTotal) / (currentDays || 1))}
+                                </span>
+                                {servicesTotal > 0 && (
+                                    <span className="text-[10px] text-primary/60 font-medium">
+                                        Serviços inclusos: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(servicesTotal)}
+                                    </span>
+                                )}
                             </div>
                         </div>
 
@@ -284,15 +415,49 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                             />
                         </div>
 
-                        <div className="col-span-1 md:col-span-2 space-y-2">
+                        <div className="col-span-1 md:col-span-2 space-y-3">
                             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Serviços Adicionais</label>
-                            <input
-                                type="text"
-                                placeholder="Ex: GPS, Cadeira Bebê..."
-                                className="w-full h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all dark:text-white"
-                                value={formData.additional_services}
-                                onChange={e => setFormData({ ...formData, additional_services: e.target.value })}
-                            />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {ADDITIONAL_SERVICES.map(service => (
+                                    <label
+                                        key={service.id}
+                                        className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${selectedServices.includes(service.id)
+                                            ? 'bg-primary/5 border-primary/30 ring-1 ring-primary/30'
+                                            : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:bg-slate-50'
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="checkbox"
+                                                className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                                checked={selectedServices.includes(service.id)}
+                                                onChange={(e) => {
+                                                    const newServices = e.target.checked
+                                                        ? [...selectedServices, service.id]
+                                                        : selectedServices.filter(id => id !== service.id);
+                                                    setSelectedServices(newServices);
+                                                    setFormData(prev => ({
+                                                        ...prev,
+                                                        additional_services: newServices.map(id => ADDITIONAL_SERVICES.find(s => s.id === id)?.name).join(', ')
+                                                    }));
+                                                }}
+                                            />
+                                            <div className="flex flex-col">
+                                                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{service.name}</span>
+                                                <span className="text-[10px] text-slate-400 font-medium">
+                                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(service.price)}
+                                                    {service.type === 'daily' ? '/diária' : ' (único)'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {selectedServices.includes(service.id) && (
+                                            <span className="text-[10px] font-black text-primary">
+                                                +{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(service.type === 'daily' ? service.price * currentDays : service.price)}
+                                            </span>
+                                        )}
+                                    </label>
+                                ))}
+                            </div>
                         </div>
                     </div>
 

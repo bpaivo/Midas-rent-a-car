@@ -13,7 +13,9 @@ export const vehicleSchema = z.object({
     doors: z.number().min(2),
     transmission: z.enum(['Manual', 'Automático']),
     renavan: z.string().min(11, 'Renavan inválido'),
-    chassis: z.string().min(17, 'Chassis inválido')
+    chassis: z.string().min(17, 'Chassis inválido'),
+    default_security_deposit: z.number().min(0, 'Valor de caução inválido'),
+    default_insurance_value: z.number().min(0, 'Valor de seguro inválido')
 });
 
 export type VehicleFormData = z.infer<typeof vehicleSchema>;

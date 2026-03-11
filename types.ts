@@ -49,6 +49,8 @@ export interface Vehicle {
   transmission: 'Manual' | 'Automático';
   renavan: string;
   chassis: string;
+  default_security_deposit: number;
+  default_insurance_value: number;
 }
 
 export interface Reservation {
@@ -58,7 +60,7 @@ export interface Reservation {
   pickup_date: string;
   return_date: string;
   status: ReservationStatus;
-  created_at: string;
+  created_at?: string;
   daily_rate: number;
   days: number;
   total_value: number;

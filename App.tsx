@@ -99,31 +99,24 @@ const App: React.FC = () => {
   };
 
   const fetchData = async (isManualRefresh = false) => {
-    // Só mostramos o loading global se for a primeira carga ou um refresh manual
     if (hasInitialLoaded && !isManualRefresh) {
-      // Se já carregou uma vez e não é refresh manual, busca em background
-      console.log('[App] Atualizando dados em background...');
-      try {
-        await Promise.all([
-          fetchClients(),
-          fetchVehicles(),
-          fetchReservations()
-        ]);
-      } catch (error) {
-        console.error('Background fetch error:', error);
-      }
+      toast.promise(
+        Promise.all([fetchClients(), fetchVehicles(), fetchReservations()]),
+        {
+          loading: 'Atualizando dados...',
+          success: 'Dados atualizados!',
+          error: 'Falha ao sincronizar dados.'
+        }
+      );
       return;
     }
 
     setIsLoading(true);
     try {
-      console.log('[App] Executando carga inicial de dados...');
-      await Promise.all([
-        fetchClients(),
-        fetchVehicles(),
-        fetchReservations()
-      ]);
+      await Promise.all([fetchClients(), fetchVehicles(), fetchReservations()]);
       setHasInitialLoaded(true);
+    } catch (error) {
+      toast.error('Erro na carga inicial do sistema.');
     } finally {
       setIsLoading(false);
     }
@@ -238,23 +231,18 @@ const App: React.FC = () => {
                           toast.success('Dados do cliente atualizados!');
                         }
                       } catch (err: any) {
-                        if (original) {
-                          setClients(prev => prev.map(item => item.id === id ? original : item));
-                        }
+                        if (original) setClients(prev => prev.map(item => item.id === id ? original : item));
                         console.error('Error updating client:', err);
                         toast.error(`Erro ao atualizar cliente: ${err.message || 'Erro desconhecido'}`);
                       }
                     }}
                     onDeleteClient={async (id) => {
-                      const original = [...clients];
-                      setClients(prev => prev.filter(item => item.id !== id));
-
                       try {
                         const { error } = await supabase.from('clients').update({ status: 'Pendente' }).eq('id', id);
                         if (error) throw error;
+                        setClients(prev => prev.filter(item => item.id !== id));
                         toast.success('Cliente removido com sucesso!');
                       } catch (err: any) {
-                        setClients(original);
                         console.error('Erro ao excluir cliente:', err);
                         toast.error(`Erro ao excluir cliente: ${err.message || 'Verifique reservas vinculadas.'}`);
                       }
@@ -266,26 +254,21 @@ const App: React.FC = () => {
                     vehicles={vehicles}
                     isLoading={isLoading}
                     onAddVehicle={async (v) => {
-                      const tempId = crypto.randomUUID();
-                      const optimisticItem = { ...v, id: tempId } as Vehicle;
-                      setVehicles(prev => [optimisticItem, ...prev]);
-
                       try {
                         const { data, error } = await supabase.from('vehicles').insert(v).select().single();
                         if (error) throw error;
                         if (data) {
-                          setVehicles(prev => prev.map(item => item.id === tempId ? data : item));
+                          setVehicles(prev => [data, ...prev]);
                           toast.success('Veículo adicionado com sucesso!');
                         }
                       } catch (err: any) {
-                        setVehicles(prev => prev.filter(item => item.id !== tempId));
                         console.error('Erro ao salvar veículo:', err);
-                        toast.error('Erro ao salvar veículo.');
+                        toast.error(`Erro ao salvar veículo: ${err.message || 'Erro desconhecido'}`);
                       }
                     }}
                     onUpdateVehicle={async (id, v) => {
                       const original = vehicles.find(item => item.id === id);
-                      setVehicles(prev => prev.map(item => item.id === id ? { ...v, id } as Vehicle : item));
+                      setVehicles(prev => prev.map(item => item.id === id ? { ...item, ...v } as Vehicle : item));
 
                       try {
                         const { data, error } = await supabase.from('vehicles').update(v).eq('id', id).select().single();
@@ -294,12 +277,10 @@ const App: React.FC = () => {
                           setVehicles(prev => prev.map(item => item.id === id ? data : item));
                           toast.success('Veículo atualizado!');
                         }
-                      } catch (err) {
-                        if (original) {
-                          setVehicles(prev => prev.map(item => item.id === id ? original : item));
-                        }
+                      } catch (err: any) {
+                        if (original) setVehicles(prev => prev.map(item => item.id === id ? original : item));
                         console.error('Erro ao atualizar veículo:', err);
-                        toast.error('Erro ao atualizar veículo.');
+                        toast.error(`Erro ao atualizar veículo: ${err.message || 'Erro desconhecido'}`);
                       }
                     }}
                     onDeleteVehicle={async (id) => {
@@ -324,28 +305,21 @@ const App: React.FC = () => {
                     isLoading={isLoading}
                     onEmitVoucher={setSelectedVoucherRes}
                     onUpdateReservation={async (id, updates) => {
+                      const original = reservations.find(item => item.id === id);
+                      setReservations(prev => prev.map(item => item.id === id ? { ...item, ...updates } as Reservation : item));
+
                       try {
                         const { error } = await supabase.from('reservations').update(updates).eq('id', id);
                         if (error) throw error;
                         await fetchReservations();
-                        toast.success('Reserva atualizada com sucesso!');
-                      } catch (err) {
+                        toast.success('Reserva atualizada!');
+                      } catch (err: any) {
+                        if (original) setReservations(prev => prev.map(item => item.id === id ? original : item));
                         console.error('Error updating reservation:', err);
-                        toast.error('Erro ao atualizar reserva.');
+                        toast.error(`Erro ao atualizar reserva: ${err.message || 'Erro desconhecido'}`);
                       }
                     }}
                     onAddReservation={async (r) => {
-                      const tempId = crypto.randomUUID();
-                      const optimisticItem = {
-                        ...r,
-                        id: tempId,
-                        clientName: clients.find(c => c.id === r.client_id)?.name || '...',
-                        vehicleModel: vehicles.find(v => v.id === r.vehicle_id)?.model || '...',
-                        vehiclePlate: vehicles.find(v => v.id === r.vehicle_id)?.plate || '...',
-                        dateStr: new Date().toLocaleDateString('pt-BR')
-                      } as Reservation;
-                      setReservations(prev => [optimisticItem, ...prev]);
-
                       try {
                         const { data, error } = await supabase.from('reservations').insert([r]).select().single();
                         if (error) throw error;
@@ -353,22 +327,18 @@ const App: React.FC = () => {
                           await fetchReservations();
                           toast.success('Reserva criada com sucesso!');
                         }
-                      } catch (err) {
-                        setReservations(prev => prev.filter(item => item.id !== tempId));
+                      } catch (err: any) {
                         console.error('Error adding reservation:', err);
-                        toast.error('Erro ao criar reserva.');
+                        toast.error(`Erro ao criar reserva: ${err.message || 'Erro desconhecido'}`);
                       }
                     }}
                     onDeleteReservation={async (id) => {
-                      const original = [...reservations];
-                      setReservations(prev => prev.filter(item => item.id !== id));
-
                       try {
                         const { error } = await supabase.from('reservations').delete().eq('id', id);
                         if (error) throw error;
+                        setReservations(prev => prev.filter(item => item.id !== id));
                         toast.success('Reserva excluída com sucesso!');
                       } catch (err: any) {
-                        setReservations(original);
                         console.error('Error deleting reservation:', err);
                         toast.error(`Erro ao excluir reserva: ${err.message || 'Erro desconhecido'}`);
                       }
@@ -399,15 +369,18 @@ const App: React.FC = () => {
                 clients={clients}
                 vehicles={vehicles}
                 onClose={() => setIsReservationModalOpen(false)}
-                onSave={async (newRes) => {
+                onSave={async (r) => {
                   try {
-                    const { error } = await supabase.from('reservations').insert([newRes]);
+                    const { data, error } = await supabase.from('reservations').insert([r]).select().single();
                     if (error) throw error;
-                    await fetchReservations();
-                    toast.success('Reserva confirmada!');
-                  } catch (error) {
-                    console.error('Error saving reservation:', error);
-                    toast.error('Erro ao confirmar reserva.');
+                    if (data) {
+                      await fetchReservations(); // Refresh to get joined data (client name, etc)
+                      toast.success('Reserva confirmada!');
+                      setIsReservationModalOpen(false);
+                    }
+                  } catch (err: any) {
+                    console.error('Error adding reservation:', err);
+                    toast.error(`Erro ao criar reserva: ${err.message || 'Erro desconhecido'}`);
                   }
                 }}
               />
