@@ -3,6 +3,7 @@ import { Client } from '../types';
 import { clientSchema } from '../schemas/client.schema';
 import toast from 'react-hot-toast';
 import { TableSkeleton } from '../components/LoadingSkeleton';
+import { supabase } from '../lib/supabase';
 
 interface ClientsViewProps {
   clients: Client[];
@@ -60,14 +61,20 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, onAddClient, onUpdat
   };
 
   const uploadFile = async (file: File, path: string) => {
-    const { supabase } = await import('../lib/supabase');
     const fileExt = file.name.split('.').pop();
     const fileName = `${crypto.randomUUID()}.${fileExt}`;
     const filePath = `${path}/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
+    // Timeout de 15 segundos para o upload
+    const uploadPromise = supabase.storage
       .from('clients-docs')
       .upload(filePath, file);
+
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Tempo de upload esgotado')), 15000)
+    );
+
+    const { error: uploadError } = await Promise.race([uploadPromise, timeoutPromise]) as any;
 
     if (uploadError) throw uploadError;
 
@@ -118,20 +125,16 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, onAddClient, onUpdat
 
     try {
       const finalData = { ...formData };
-      const uploadPromises = [];
-
+      
+      // Upload de arquivos em paralelo com tratamento de erro individual
       if (attachedFiles.cnh) {
-        uploadPromises.push(uploadFile(attachedFiles.cnh, 'cnh').then(url => finalData.cnh_url = url));
+        finalData.cnh_url = await uploadFile(attachedFiles.cnh, 'cnh');
       }
       if (attachedFiles.address) {
-        uploadPromises.push(uploadFile(attachedFiles.address, 'address').then(url => finalData.address_proof_url = url));
+        finalData.address_proof_url = await uploadFile(attachedFiles.address, 'address');
       }
       if (attachedFiles.selfie) {
-        uploadPromises.push(uploadFile(attachedFiles.selfie, 'selfie').then(url => finalData.selfie_url = url));
-      }
-
-      if (uploadPromises.length > 0) {
-        await Promise.all(uploadPromises);
+        finalData.selfie_url = await uploadFile(attachedFiles.selfie, 'selfie');
       }
 
       if (editingClient) {
@@ -145,7 +148,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, onAddClient, onUpdat
       setIsModalOpen(false);
     } catch (error: any) {
       console.error('Erro ao salvar cliente:', error);
-      toast.error('Erro ao salvar dados do cliente.', { id: loadingToast });
+      toast.error('Erro ao salvar: ' + (error.message || 'Falha na conexão'), { id: loadingToast });
     } finally {
       setIsSubmitting(false);
     }
