@@ -41,7 +41,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
         discount_percent: 0,
         security_deposit: 0,
         insurance_value: 0,
-        additional_services: '', // Mantido como string para o DB
+        additional_services: '',
         status: ReservationStatus.AGUARDANDO
     });
     const [selectedServices, setSelectedServices] = useState<string[]>([]);
@@ -56,8 +56,6 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
 
     const fetchAvailability = async (vehicleId: string, signal?: { aborted: boolean }) => {
         setIsLoadingAvailability(true);
-        console.log(`[ReservationModal] Buscando disponibilidade para veículo: ${vehicleId}`);
-
         try {
             const data = await retryAsync(async () => {
                 const { data, error } = await supabase
@@ -71,13 +69,9 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                 return data;
             });
 
-            if (signal?.aborted) {
-                console.log(`[ReservationModal] Requisição para ${vehicleId} ignorada (limpeza).`);
-                return;
-            }
+            if (signal?.aborted) return;
 
             if (data) {
-                console.log(`[ReservationModal] Disponibilidade carregada: ${data.length} períodos ocupados.`);
                 setOccupiedRanges(data.map(r => ({
                     start: new Date(r.pickup_date),
                     end: new Date(r.return_date)
@@ -97,7 +91,6 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
 
     useEffect(() => {
         let isAborted = { aborted: false };
-
         if (formData.vehicle_id) {
             const vehicle = vehicles.find(v => v.id === formData.vehicle_id);
             if (vehicle) {
@@ -111,10 +104,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
             }
             fetchAvailability(formData.vehicle_id, isAborted);
         }
-
-        return () => {
-            isAborted.aborted = true;
-        };
+        return () => { isAborted.aborted = true; };
     }, [formData.vehicle_id]);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -133,14 +123,17 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
         const currentDailyRate = formData.base_rate * (1 - (formData.discount_percent / 100));
         const total_value = (currentDailyRate * days) + formData.insurance_value;
 
-        const dataToValidate = {
-            ...formData,
+        // Removemos base_rate e discount_percent pois não existem no banco de dados
+        const { base_rate, discount_percent, ...cleanFormData } = formData;
+
+        const dataToSave = {
+            ...cleanFormData,
             daily_rate: currentDailyRate,
             days,
             total_value
         };
 
-        const validation = reservationSchema.safeParse(dataToValidate);
+        const validation = reservationSchema.safeParse(dataToSave);
 
         if (!validation.success) {
             const firstError = validation.error.issues[0];
@@ -150,7 +143,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
 
         setIsSubmitting(true);
         try {
-            await onSave(dataToValidate);
+            await onSave(dataToSave);
             onClose();
         } catch (error: any) {
             console.error('Error saving reservation:', error);
@@ -184,7 +177,6 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
         const dailyRate = formData.base_rate * (1 - (effectiveDiscount / 100));
         let subtotal = days * dailyRate;
 
-        // Calcular serviços adicionais
         let servicesTotal = 0;
         selectedServices.forEach(serviceId => {
             const service = ADDITIONAL_SERVICES.find(s => s.id === serviceId);
@@ -204,7 +196,6 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
 
     const { days: currentDays, subtotal: currentSubtotal, suggestedDiscount, currentTier, servicesTotal } = calculateTotals();
 
-    // Atualizar desconto quando os dias mudam (se não for manual)
     useEffect(() => {
         if (!isManualDiscount && currentDays > 0) {
             setFormData(prev => ({ ...prev, discount_percent: suggestedDiscount }));
@@ -309,7 +300,6 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                             />
                         </div>
 
-                        {/* Tabela de Descontos Progressivos */}
                         <div className="col-span-1 md:col-span-2 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
                             <div className="flex items-center justify-between">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Tabela de Descontos Progressivos</label>
@@ -343,7 +333,6 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                             </div>
                         </div>
 
-                        {/* Campos Informativos de Resumo */}
                         <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 space-y-1">
                             <label className="text-[10px] font-black text-primary uppercase tracking-widest">Resumo da Seleção</label>
                             <div className="text-sm font-bold text-slate-900 dark:text-white">
