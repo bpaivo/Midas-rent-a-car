@@ -65,16 +65,9 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, onAddClient, onUpdat
     const fileName = `${crypto.randomUUID()}.${fileExt}`;
     const filePath = `${path}/${fileName}`;
 
-    // Timeout de 15 segundos para o upload
-    const uploadPromise = supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from('clients-docs')
       .upload(filePath, file);
-
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Tempo de upload esgotado')), 15000)
-    );
-
-    const { error: uploadError } = await Promise.race([uploadPromise, timeoutPromise]) as any;
 
     if (uploadError) throw uploadError;
 
@@ -126,7 +119,6 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, onAddClient, onUpdat
     try {
       const finalData = { ...formData };
       
-      // Upload de arquivos em paralelo com tratamento de erro individual
       if (attachedFiles.cnh) {
         finalData.cnh_url = await uploadFile(attachedFiles.cnh, 'cnh');
       }
@@ -188,7 +180,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, onAddClient, onUpdat
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {clients.filter(c => c.status !== 'Pendente').map((c) => (
+                  {clients.map((c) => (
                     <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -264,7 +256,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, onAddClient, onUpdat
                   ))}
                   {clients.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">Nenhum cliente encontrado.</td>
+                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">Nenhum cliente encontrado no banco de dados.</td>
                     </tr>
                   )}
                 </tbody>

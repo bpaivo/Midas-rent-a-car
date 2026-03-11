@@ -47,8 +47,10 @@ const App: React.FC = () => {
       const { data, error } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       setClients(data || []);
-    } catch (error) {
+      return data;
+    } catch (error: any) {
       console.error('Error fetching clients:', error);
+      toast.error('Erro ao carregar clientes: ' + error.message);
     }
   };
 
@@ -57,8 +59,10 @@ const App: React.FC = () => {
       const { data, error } = await supabase.from('vehicles').select('*').order('model', { ascending: true });
       if (error) throw error;
       setVehicles(data || []);
-    } catch (error) {
+      return data;
+    } catch (error: any) {
       console.error('Error fetching vehicles:', error);
+      toast.error('Erro ao carregar veículos: ' + error.message);
     }
   };
 
@@ -79,9 +83,11 @@ const App: React.FC = () => {
           dateStr: new Date(r.created_at).toLocaleDateString('pt-BR')
         }));
         setReservations(transformed);
+        return transformed;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching reservations:', error);
+      toast.error('Erro ao carregar reservas: ' + error.message);
     }
   };
 
@@ -93,10 +99,15 @@ const App: React.FC = () => {
 
     setIsLoading(true);
     try {
-      await Promise.all([fetchClients(), fetchVehicles(), fetchReservations()]);
+      // Usando retryAsync para garantir que a conexão seja estabelecida
+      await retryAsync(async () => {
+        await Promise.all([fetchClients(), fetchVehicles(), fetchReservations()]);
+      }, 3, 1000);
+      
       setHasInitialLoaded(true);
     } catch (error) {
-      console.error('Erro na carga inicial:', error);
+      console.error('Erro crítico na carga inicial:', error);
+      toast.error('Falha na conexão com o banco de dados. Tente recarregar a página.');
     } finally {
       setIsLoading(false);
     }
@@ -170,7 +181,7 @@ const App: React.FC = () => {
                       if (data && data[0]) setClients(prev => prev.map(item => item.id === id ? data[0] : item));
                     }}
                     onDeleteClient={async (id) => {
-                      const { error } = await supabase.from('clients').update({ status: 'Pendente' }).eq('id', id);
+                      const { error } = await supabase.from('clients').delete().eq('id', id);
                       if (error) throw error;
                       setClients(prev => prev.filter(item => item.id !== id));
                     }}
@@ -191,7 +202,7 @@ const App: React.FC = () => {
                       if (data && data[0]) setVehicles(prev => prev.map(item => item.id === id ? data[0] : item));
                     }}
                     onDeleteVehicle={async (id) => {
-                      const { error } = await supabase.from('vehicles').update({ status: 'Desativado' }).eq('id', id);
+                      const { error } = await supabase.from('vehicles').delete().eq('id', id);
                       if (error) throw error;
                       setVehicles(prev => prev.filter(item => item.id !== id));
                     }}
