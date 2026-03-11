@@ -38,43 +38,39 @@ const App: React.FC = () => {
   const fetchData = useCallback(async (isManual = false) => {
     if (!session?.user?.id) return;
     
-    if (isManual) toast.loading('Sincronizando dados...', { id: 'sync' });
+    const toastId = isManual ? toast.loading('Sincronizando dados...') : null;
     setIsLoading(true);
 
-    console.log('[App] Iniciando sincronização definitiva...');
+    // Timeout de segurança para não travar a interface
+    const safetyTimeout = setTimeout(() => {
+      setIsLoading(false);
+      if (isManual) toast.error('Tempo de resposta esgotado. Verifique sua conexão.', { id: toastId });
+    }, 12000);
 
     try {
+      console.log('[App] Iniciando sincronização definitiva...');
+
       // 1. Buscar Clientes
-      const { data: clientsData, error: clientsErr } = await supabase
-        .from('clients')
-        .select('*')
-        .order('name', { ascending: true });
-      
-      if (clientsErr) console.error('[App] Erro Clientes:', clientsErr);
-      const currentClients = clientsData || [];
+      console.log('[App] Buscando clientes...');
+      const { data: cData, error: cErr } = await supabase.from('clients').select('*').order('name');
+      if (cErr) console.error('[App] Erro Clientes:', cErr);
+      const currentClients = cData || [];
       setClients(currentClients);
 
       // 2. Buscar Veículos
-      const { data: vehiclesData, error: vehiclesErr } = await supabase
-        .from('vehicles')
-        .select('*')
-        .order('model', { ascending: true });
-      
-      if (vehiclesErr) console.error('[App] Erro Veículos:', vehiclesErr);
-      const currentVehicles = vehiclesData || [];
+      console.log('[App] Buscando veículos...');
+      const { data: vData, error: vErr } = await supabase.from('vehicles').select('*').order('model');
+      if (vErr) console.error('[App] Erro Veículos:', vErr);
+      const currentVehicles = vData || [];
       setVehicles(currentVehicles);
 
-      // 3. Buscar Reservas (Sem joins complexos para evitar erros de schema)
-      const { data: resData, error: resErr } = await supabase
-        .from('reservations')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // 3. Buscar Reservas
+      console.log('[App] Buscando reservas...');
+      const { data: rData, error: rErr } = await supabase.from('reservations').select('*').order('created_at', { ascending: false });
+      if (rErr) console.error('[App] Erro Reservas:', rErr);
       
-      if (resErr) console.error('[App] Erro Reservas:', resErr);
-      
-      if (resData) {
-        // Cruzamento de dados em memória (mais seguro)
-        const transformed: Reservation[] = resData.map((r: any) => {
+      if (rData) {
+        const transformed: Reservation[] = rData.map((r: any) => {
           const client = currentClients.find(c => c.id === r.client_id);
           const vehicle = currentVehicles.find(v => v.id === r.vehicle_id);
           return {
@@ -88,11 +84,13 @@ const App: React.FC = () => {
         setReservations(transformed);
       }
 
-      if (isManual) toast.success('Dados carregados!', { id: 'sync' });
-    } catch (error) {
+      console.log('[App] Sincronização concluída com sucesso.');
+      if (isManual) toast.success('Dados atualizados!', { id: toastId });
+    } catch (error: any) {
       console.error('[App] Erro fatal no carregamento:', error);
-      if (isManual) toast.error('Erro ao conectar com o banco.');
+      if (isManual) toast.error(`Erro: ${error.message || 'Falha na conexão'}`, { id: toastId });
     } finally {
+      clearTimeout(safetyTimeout);
       setIsLoading(false);
     }
   }, [session?.user?.id]);
@@ -145,6 +143,7 @@ const App: React.FC = () => {
             <button 
               onClick={() => fetchData(true)}
               className="fixed bottom-6 right-6 z-50 size-12 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
+              title="Sincronizar agora"
             >
               <span className="material-symbols-outlined group-hover:rotate-180 transition-transform duration-500">sync</span>
             </button>
