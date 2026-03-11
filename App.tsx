@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
@@ -34,54 +36,79 @@ const App: React.FC = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
 
   const fetchData = useCallback(async (isManual = false) => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id) {
+      console.log('[App] Sem sessão ativa, abortando busca de dados.');
+      return;
+    }
     
     if (isManual) toast.loading('Sincronizando dados...', { id: 'sync' });
     setIsLoading(true);
 
-    // Timeout de segurança: se em 8 segundos não carregar, libera a interface
-    const safetyTimeout = setTimeout(() => {
-      setIsLoading(false);
-      if (isManual) toast.error('A sincronização está demorando mais que o esperado.', { id: 'sync' });
-    }, 8000);
+    console.log('[App] Iniciando busca de dados no Supabase...');
 
     try {
-      console.log('[App] Iniciando busca de dados...');
-      
-      // Buscas individuais para evitar que um erro em uma tabela trave todas
+      // Buscas individuais para máxima resiliência
+      const clientsPromise = supabase.from('clients').select('*').order('created_at', { ascending: false });
+      const vehiclesPromise = supabase.from('vehicles').select('*').order('model', { ascending: true });
+      const reservationsPromise = supabase.from('reservations').select('*, clients(name), vehicles(model, plate)').order('created_at', { ascending: false });
+
       const [clientsRes, vehiclesRes, reservationsRes] = await Promise.allSettled([
-        supabase.from('clients').select('*').order('created_at', { ascending: false }),
-        supabase.from('vehicles').select('*').order('model', { ascending: true }),
-        supabase.from('reservations').select('*, clients(name), vehicles(model, plate)').order('created_at', { ascending: false })
+        clientsPromise,
+        vehiclesPromise,
+        reservationsPromise
       ]);
 
-      if (clientsRes.status === 'fulfilled' && !clientsRes.value.error) {
-        setClients(clientsRes.value.data || []);
+      // Processar Clientes
+      if (clientsRes.status === 'fulfilled') {
+        if (clientsRes.value.error) {
+          console.error('[App] Erro ao buscar clientes:', clientsRes.value.error);
+        } else {
+          const data = clientsRes.value.data || [];
+          console.log(`[App] ${data.length} clientes carregados:`, data);
+          setClients(data);
+        }
+      } else {
+        console.error('[App] Promessa de clientes rejeitada:', clientsRes.reason);
       }
 
-      if (vehiclesRes.status === 'fulfilled' && !vehiclesRes.value.error) {
-        setVehicles(vehiclesRes.value.data || []);
+      // Processar Veículos
+      if (vehiclesRes.status === 'fulfilled') {
+        if (vehiclesRes.value.error) {
+          console.error('[App] Erro ao buscar veículos:', vehiclesRes.value.error);
+        } else {
+          const data = vehiclesRes.value.data || [];
+          console.log(`[App] ${data.length} veículos carregados:`, data);
+          setVehicles(data);
+        }
+      } else {
+        console.error('[App] Promessa de veículos rejeitada:', vehiclesRes.reason);
       }
 
-      if (reservationsRes.status === 'fulfilled' && !reservationsRes.value.error) {
-        const data = reservationsRes.value.data || [];
-        const transformed: Reservation[] = data.map((r: any) => ({
-          ...r,
-          clientName: r.clients?.name || 'N/A',
-          vehicleModel: r.vehicles?.model || 'N/A',
-          vehiclePlate: r.vehicles?.plate || 'N/A',
-          dateStr: new Date(r.created_at).toLocaleDateString('pt-BR')
-        }));
-        setReservations(transformed);
+      // Processar Reservas
+      if (reservationsRes.status === 'fulfilled') {
+        if (reservationsRes.value.error) {
+          console.error('[App] Erro ao buscar reservas:', reservationsRes.value.error);
+        } else {
+          const data = reservationsRes.value.data || [];
+          console.log(`[App] ${data.length} reservas carregadas:`, data);
+          const transformed: Reservation[] = data.map((r: any) => ({
+            ...r,
+            clientName: r.clients?.name || 'N/A',
+            vehicleModel: r.vehicles?.model || 'N/A',
+            vehiclePlate: r.vehicles?.plate || 'N/A',
+            dateStr: new Date(r.created_at).toLocaleDateString('pt-BR')
+          }));
+          setReservations(transformed);
+        }
+      } else {
+        console.error('[App] Promessa de reservas rejeitada:', reservationsRes.reason);
       }
 
-      if (isManual) toast.success('Dados atualizados!', { id: 'sync' });
-      console.log('[App] Dados carregados com sucesso.');
+      if (isManual) toast.success('Dados sincronizados!', { id: 'sync' });
     } catch (error) {
-      console.error('[App] Erro ao carregar dados:', error);
-      if (isManual) toast.error('Falha na sincronização.', { id: 'sync' });
+      console.error('[App] Erro inesperado ao carregar dados:', error);
+      if (isManual) toast.error('Erro na sincronização.', { id: 'sync' });
     } finally {
-      clearTimeout(safetyTimeout);
       setIsLoading(false);
     }
   }, [session?.user?.id]);
@@ -130,7 +157,7 @@ const App: React.FC = () => {
             onAddReservation={() => setIsReservationModalOpen(true)}
             onViewProfile={() => setIsProfileModalOpen(true)}
           >
-            {/* Botão de Sincronização Flutuante para Debug */}
+            {/* Botão de Sincronização Flutuante */}
             <button 
               onClick={() => fetchData(true)}
               className="fixed bottom-6 right-6 z-50 size-12 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"

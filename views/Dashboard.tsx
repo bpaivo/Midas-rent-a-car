@@ -34,7 +34,6 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, recentReservations, isLoad
               </div>
               <h3 className="text-lg font-medium text-slate-600 dark:text-slate-400">Carros Disponíveis</h3>
             </div>
-            <span className="text-xs font-bold text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-full">+5% vs. ontem</span>
           </div>
           <div className="flex items-end justify-between">
             <p className="text-6xl font-bold text-primary dark:text-white tracking-tighter">{stats.available}</p>
@@ -59,7 +58,6 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, recentReservations, isLoad
               </div>
               <h3 className="text-lg font-medium text-slate-600 dark:text-slate-400">Carros Alugados</h3>
             </div>
-            <span className="text-xs font-bold text-orange-600 bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded-full">-2% vs. ontem</span>
           </div>
           <div className="flex items-end justify-between">
             <p className="text-6xl font-bold text-primary dark:text-white tracking-tighter">{stats.rented}</p>
@@ -79,9 +77,6 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, recentReservations, isLoad
       {/* Recent Activity Section */}
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-xl font-bold text-primary dark:text-white">Atividade Recente</h2>
-        <button className="text-sm font-semibold text-primary/60 hover:text-primary dark:text-accent-sunshine/80 dark:hover:text-accent-sunshine flex items-center gap-1 transition-colors">
-          Ver todas as reservas <span className="material-symbols-outlined text-base">arrow_forward</span>
-        </button>
       </div>
 
       <div className="bg-white dark:bg-[#162a2b] rounded-xl border border-slate-200 dark:border-white/5 shadow-sm overflow-hidden">
@@ -99,7 +94,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, recentReservations, isLoad
             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
               {recentReservations.map((res) => (
                 <tr key={res.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
-                  <td className="px-6 py-4 font-semibold text-primary dark:text-white">#{res.id}</td>
+                  <td className="px-6 py-4 font-semibold text-primary dark:text-white">#{res.id.substring(0, 8)}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <div className="size-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold dark:text-white">
@@ -110,11 +105,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, recentReservations, isLoad
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{res.vehicleModel}</td>
                   <td className="px-6 py-4">
-                    <span className={`px-3 py-1 text-xs font-bold rounded-full ${res.status === 'Confirmado' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
-                        res.status === 'Pendente' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' :
-                          res.status === 'Em Uso' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' :
-                            'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400'
-                      }`}>
+                    <span className={`px-3 py-1 text-xs font-bold rounded-full bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400`}>
                       {res.status}
                     </span>
                   </td>
