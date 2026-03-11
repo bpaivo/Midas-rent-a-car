@@ -102,8 +102,8 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, recentReservations, isLoad
                   <td className="px-6 py-4 font-semibold text-primary dark:text-white">#{res.id}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      1                      <div className="size-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold dark:text-white">
-                        {res.clientName.split(' ').map(n => n[0]).join('')}
+                      <div className="size-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold dark:text-white">
+                        {res.clientName?.split(' ').map(n => n[0]).join('') || '??'}
                       </div>
                       <span className="text-sm text-slate-700 dark:text-slate-300">{res.clientName}</span>
                     </div>
