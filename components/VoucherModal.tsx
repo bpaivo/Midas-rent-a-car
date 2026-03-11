@@ -161,13 +161,18 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
                   <h3 className="text-[10px] font-black uppercase tracking-widest">02. Identificação do Veiculo</h3>
                 </div>
                 <div className="grid grid-cols-3 gap-6 px-4">
-                  <div className="col-span-1">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Modelo / Categoria</p>
-                    <p className="text-sm font-bold uppercase text-slate-900">{vehicle?.model || reservation.vehicleModel} - {vehicle?.category || '---'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Placa</p>
-                    <p className="text-sm font-bold font-mono text-primary bg-primary/5 border border-primary/20 px-3 py-0.5 rounded inline-block">{vehicle?.plate || reservation.vehiclePlate}</p>
+                  <div className="col-span-2 flex gap-4">
+                    {vehicle?.image_url && (
+                      <img src={vehicle.image_url} crossOrigin="anonymous" className="w-32 h-20 object-cover rounded-lg border border-slate-200" />
+                    )}
+                    <div>
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Modelo / Categoria</p>
+                      <p className="text-sm font-bold uppercase text-slate-900">{vehicle?.model || reservation.vehicleModel} - {vehicle?.category || '---'}</p>
+                      <div className="mt-2">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Placa</p>
+                        <p className="text-sm font-bold font-mono text-primary bg-primary/5 border border-primary/20 px-3 py-0.5 rounded inline-block">{vehicle?.plate || reservation.vehiclePlate}</p>
+                      </div>
+                    </div>
                   </div>
                   <div>
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Câmbio</p>

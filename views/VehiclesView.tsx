@@ -27,7 +27,8 @@ const initialState: Omit<Vehicle, 'id'> = {
   renavan: '',
   chassis: '',
   default_security_deposit: 0,
-  default_insurance_value: 0
+  default_insurance_value: 0,
+  image_url: ''
 };
 
 const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, onAddVehicle, onUpdateVehicle, onDeleteVehicle, isLoading }) => {
@@ -36,6 +37,7 @@ const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, onAddVehicle, onU
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [attachedImage, setAttachedImage] = useState<File | null>(null);
 
   const handleEdit = (v: Vehicle) => {
     const { id, ...data } = v;
@@ -48,13 +50,32 @@ const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, onAddVehicle, onU
     setIsModalOpen(false);
     setFormData(initialState);
     setEditingId(null);
+    setAttachedImage(null);
+  };
+
+  const uploadFile = async (file: File) => {
+    const { supabase } = await import('../lib/supabase');
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${crypto.randomUUID()}.${fileExt}`;
+    const filePath = `vehicles/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('clients-docs') // Usando o mesmo bucket por simplicidade, mas em pastas diferentes
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage
+      .from('clients-docs')
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const validation = vehicleSchema.safeParse(formData);
-
     if (!validation.success) {
       const firstError = validation.error.issues[0];
       toast.error(`${String(firstError.path[0])}: ${firstError.message}`);
@@ -62,15 +83,24 @@ const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, onAddVehicle, onU
     }
 
     setIsSubmitting(true);
+    const loadingToast = toast.loading('Salvando veículo...');
+
     try {
-      if (editingId) {
-        await onUpdateVehicle(editingId, formData);
-      } else {
-        await onAddVehicle(formData);
+      const finalData = { ...formData };
+      if (attachedImage) {
+        finalData.image_url = await uploadFile(attachedImage);
       }
+
+      if (editingId) {
+        await onUpdateVehicle(editingId, finalData);
+      } else {
+        await onAddVehicle(finalData);
+      }
+      toast.success('Veículo salvo com sucesso!', { id: loadingToast });
       handleCloseModal();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao salvar veículo:", err);
+      toast.error('Erro ao salvar veículo.', { id: loadingToast });
     } finally {
       setIsSubmitting(false);
     }
@@ -111,9 +141,18 @@ const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, onAddVehicle, onU
                 {vehicles && vehicles.length > 0 ? vehicles.filter(v => v.status !== 'Desativado').map((v) => (
                   <tr key={v.id} className="hover:bg-gray-50 dark:hover:bg-primary/5 transition-colors">
                     <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold text-primary dark:text-white">{v.model}</span>
-                        <span className="text-xs text-gray-400 uppercase tracking-tighter">{v.brand}</span>
+                      <div className="flex items-center gap-3">
+                        {v.image_url ? (
+                          <img src={v.image_url} alt={v.model} className="size-10 rounded-lg object-cover border border-slate-200" />
+                        ) : (
+                          <div className="size-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400">
+                            <span className="material-symbols-outlined">directions_car</span>
+                          </div>
+                        )}
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-primary dark:text-white">{v.model}</span>
+                          <span className="text-xs text-gray-400 uppercase tracking-tighter">{v.brand}</span>
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm font-mono font-bold text-primary dark:text-white">{v.plate}</td>
@@ -224,6 +263,32 @@ const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, onAddVehicle, onU
 
             <form className="p-6" onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                {/* Foto do Veículo */}
+                <div className="md:col-span-3 space-y-2">
+                  <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Foto do Veículo</label>
+                  <div className="flex items-center gap-6">
+                    <div className="size-32 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden relative group">
+                      {attachedImage ? (
+                        <img src={URL.createObjectURL(attachedImage)} className="w-full h-full object-cover" />
+                      ) : formData.image_url ? (
+                        <img src={formData.image_url} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="material-symbols-outlined text-4xl text-slate-300">add_a_photo</span>
+                      )}
+                      <input 
+                        type="file" 
+                        className="absolute inset-0 opacity-0 cursor-pointer" 
+                        accept="image/*"
+                        onChange={(e) => setAttachedImage(e.target.files?.[0] || null)}
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <p className="text-xs text-slate-500 font-medium">Clique no quadro ao lado para selecionar uma imagem.</p>
+                      <p className="text-[10px] text-slate-400">Formatos aceitos: JPG, PNG. Tamanho máximo: 2MB.</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Marca</label>
                   <input

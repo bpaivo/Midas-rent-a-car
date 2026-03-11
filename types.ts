@@ -1,4 +1,3 @@
-
 export enum ReservationStatus {
   AGUARDANDO = 'aguardando retirada',
   EM_USO = 'locação em uso',
@@ -51,6 +50,7 @@ export interface Vehicle {
   chassis: string;
   default_security_deposit: number;
   default_insurance_value: number;
+  image_url?: string;
 }
 
 export interface Reservation {

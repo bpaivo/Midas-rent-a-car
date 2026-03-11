@@ -7,7 +7,7 @@ export const vehicleSchema = z.object({
     year: z.number().min(1900).max(new Date().getFullYear() + 1),
     category: z.string().min(1, 'Categoria obrigatória'),
     km: z.number().min(0),
-    status: z.enum(['Disponível', 'Alugado', 'Reservado', 'Em Reparo']),
+    status: z.enum(['Disponível', 'Alugado', 'Reservado', 'Em manutenção', 'Desativado']),
     color: z.string().min(2, 'Cor obrigatória'),
     passengers: z.number().min(1),
     doors: z.number().min(2),
@@ -15,7 +15,8 @@ export const vehicleSchema = z.object({
     renavan: z.string().min(11, 'Renavan inválido'),
     chassis: z.string().min(17, 'Chassis inválido'),
     default_security_deposit: z.number().min(0, 'Valor de caução inválido'),
-    default_insurance_value: z.number().min(0, 'Valor de seguro inválido')
+    default_insurance_value: z.number().min(0, 'Valor de seguro inválido'),
+    image_url: z.string().url().optional().or(z.string().nullable())
 });
 
 export type VehicleFormData = z.infer<typeof vehicleSchema>;

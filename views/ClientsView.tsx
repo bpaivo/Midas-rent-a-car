@@ -69,10 +69,7 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, onAddClient, onUpdat
       .from('clients-docs')
       .upload(filePath, file);
 
-    if (uploadError) {
-      console.error(`Erro no upload (${path}):`, uploadError);
-      throw uploadError;
-    }
+    if (uploadError) throw uploadError;
 
     const { data } = supabase.storage
       .from('clients-docs')
@@ -110,7 +107,6 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, onAddClient, onUpdat
     e.preventDefault();
 
     const validation = clientSchema.safeParse(formData);
-
     if (!validation.success) {
       const firstError = validation.error.issues[0];
       toast.error(`${String(firstError.path[0])}: ${firstError.message}`);
@@ -118,29 +114,24 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, onAddClient, onUpdat
     }
 
     setIsSubmitting(true);
+    const loadingToast = toast.loading('Salvando dados do cliente...');
+
     try {
       const finalData = { ...formData };
+      const uploadPromises = [];
 
-      // REALIZAR UPLOADS SE HOUVER ARQUIVOS
-      try {
-        if (attachedFiles.cnh) {
-          toast.loading('Enviando CNH...', { id: 'upload' });
-          finalData.cnh_url = await uploadFile(attachedFiles.cnh, 'cnh');
-        }
-        if (attachedFiles.address) {
-          toast.loading('Enviando comprovante...', { id: 'upload' });
-          finalData.address_proof_url = await uploadFile(attachedFiles.address, 'address');
-        }
-        if (attachedFiles.selfie) {
-          toast.loading('Enviando selfie...', { id: 'upload' });
-          finalData.selfie_url = await uploadFile(attachedFiles.selfie, 'selfie');
-        }
-        toast.dismiss('upload');
-      } catch (err) {
-        toast.error('Erro ao enviar documentos. Verifique a conexão.');
-        toast.dismiss('upload');
-        setIsSubmitting(false);
-        return;
+      if (attachedFiles.cnh) {
+        uploadPromises.push(uploadFile(attachedFiles.cnh, 'cnh').then(url => finalData.cnh_url = url));
+      }
+      if (attachedFiles.address) {
+        uploadPromises.push(uploadFile(attachedFiles.address, 'address').then(url => finalData.address_proof_url = url));
+      }
+      if (attachedFiles.selfie) {
+        uploadPromises.push(uploadFile(attachedFiles.selfie, 'selfie').then(url => finalData.selfie_url = url));
+      }
+
+      if (uploadPromises.length > 0) {
+        await Promise.all(uploadPromises);
       }
 
       if (editingClient) {
@@ -148,11 +139,13 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, onAddClient, onUpdat
       } else {
         await onAddClient(finalData);
       }
+      
+      toast.success('Cliente salvo com sucesso!', { id: loadingToast });
       resetForm();
       setIsModalOpen(false);
     } catch (error: any) {
       console.error('Erro ao salvar cliente:', error);
-      toast.error('Erro ao salvar dados do cliente.');
+      toast.error('Erro ao salvar dados do cliente.', { id: loadingToast });
     } finally {
       setIsSubmitting(false);
     }
