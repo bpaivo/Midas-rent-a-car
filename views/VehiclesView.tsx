@@ -96,6 +96,11 @@ const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, onAddVehicle, onU
         finalData.image_url = await uploadFile(attachedImage);
       }
 
+      // Se image_url for nulo ou vazio, removemos do objeto para evitar erro de coluna inexistente no cache
+      if (!finalData.image_url) {
+        delete (finalData as any).image_url;
+      }
+
       if (editingId) {
         await onUpdateVehicle(editingId, finalData);
       } else {
@@ -106,7 +111,13 @@ const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, onAddVehicle, onU
       handleCloseModal();
     } catch (err: any) {
       console.error("Erro ao salvar veículo:", err);
-      toast.error('Erro ao salvar veículo: ' + (err.message || 'Falha na conexão'), { id: loadingToast });
+      
+      // Tratamento específico para erro de cache de esquema
+      if (err.message?.includes('image_url') && err.message?.includes('schema cache')) {
+        toast.error('O banco de dados ainda não reconheceu a nova coluna. Por favor, clique no botão REBUILD acima para atualizar o sistema.', { id: loadingToast, duration: 6000 });
+      } else {
+        toast.error('Erro ao salvar veículo: ' + (err.message || 'Falha na conexão'), { id: loadingToast });
+      }
     } finally {
       setIsSubmitting(false);
     }
