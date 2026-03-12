@@ -21,65 +21,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Timeout de segurança: se em 5 segundos não carregar, libera a tela
-        const safetyTimeout = setTimeout(() => {
-            if (loading) {
-                console.warn('[AppContext] Carregamento demorou demais. Liberando interface por segurança.');
-                setLoading(false);
-            }
-        }, 5000);
+        let mounted = true;
 
-        const getInitialSession = async () => {
+        const initializeAuth = async () => {
             try {
-                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+                // 1. Tenta recuperar a sessão existente de forma segura
+                const { data: { session: initialSession }, error } = await supabase.auth.getSession();
                 
-                if (sessionError) throw sessionError;
-                
-                setSession(session);
+                if (error) throw error;
 
-                if (session) {
-                    const { data, error: profileError } = await supabase
-                        .from('profiles')
-                        .select('*')
-                        .eq('id', session.user.id)
-                        .single();
-
-                    if (!profileError && data) {
-                        setProfile(data as UserProfile);
+                if (mounted) {
+                    setSession(initialSession);
+                    if (initialSession) {
+                        const { data: profileData } = await supabase
+                            .from('profiles')
+                            .select('*')
+                            .eq('id', initialSession.user.id)
+                            .single();
+                        
+                        if (profileData) setProfile(profileData as UserProfile);
                     }
                 }
             } catch (err) {
-                console.error('[AppContext] Erro na inicialização:', err);
+                console.error('[AuthContext] Erro na inicialização:', err);
             } finally {
-                clearTimeout(safetyTimeout);
-                setLoading(false);
+                if (mounted) setLoading(false);
             }
         };
 
-        getInitialSession();
+        initializeAuth();
 
+        // 2. Escuta mudanças de estado (Login/Logout/Refresh)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+            if (!mounted) return;
+
             setSession(currentSession);
-
-            if (currentSession) {
-                try {
-                    const { data } = await supabase
-                        .from('profiles')
-                        .select('*')
-                        .eq('id', currentSession.user.id)
-                        .single();
-
-                    if (data) setProfile(data as UserProfile);
-                } catch (err) {
-                    console.error('[AppContext] Erro ao atualizar perfil:', err);
-                }
-            } else {
+            
+            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', currentSession?.user.id)
+                    .single();
+                if (data) setProfile(data as UserProfile);
+            } else if (event === 'SIGNED_OUT') {
                 setProfile(null);
+                setSession(null);
             }
         });
 
         return () => {
-            clearTimeout(safetyTimeout);
+            mounted = false;
             subscription.unsubscribe();
         };
     }, []);
@@ -88,9 +80,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const html = document.documentElement;
         if (isDarkMode) {
             html.classList.add('dark');
-            html.classList.remove('light');
         } else {
-            html.classList.add('light');
             html.classList.remove('dark');
         }
     }, [isDarkMode]);
@@ -99,18 +89,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const logout = async () => {
         try {
-            const logoutPromise = supabase.auth.signOut();
-            toast.promise(logoutPromise, {
-                loading: 'Saindo...',
-                success: 'Até logo!',
-                error: 'Erro ao sair, tente novamente.'
-            });
-            await logoutPromise;
-        } catch (error) {
-            console.error('Logout error:', error);
-        } finally {
+            await supabase.auth.signOut();
             setSession(null);
             setProfile(null);
+            toast.success('Sessão encerrada');
+        } catch (error) {
+            console.error('Logout error:', error);
         }
     };
 
@@ -127,5 +111,3 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         </AppContext.Provider>
     );
 };
-
-export type { AppContextType };

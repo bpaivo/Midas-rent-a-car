@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { Client, Vehicle, Reservation } from './types';
@@ -30,47 +30,40 @@ const App: React.FC = () => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Data States
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  
+  const isFetching = useRef(false);
 
   const fetchData = useCallback(async (isManual = false) => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id || isFetching.current) return;
     
+    isFetching.current = true;
     const toastId = isManual ? toast.loading('Sincronizando dados...') : null;
     setIsLoading(true);
 
-    // Timeout de segurança para não travar a interface
-    const safetyTimeout = setTimeout(() => {
-      setIsLoading(false);
-      if (isManual) toast.error('Tempo de resposta esgotado. Verifique sua conexão.', { id: toastId });
-    }, 12000);
-
     try {
-      console.log('[App] Iniciando sincronização definitiva...');
+      // Buscas paralelas para maior velocidade
+      const [clientsRes, vehiclesRes, reservationsRes] = await Promise.all([
+        supabase.from('clients').select('*').order('name'),
+        supabase.from('vehicles').select('*').order('model'),
+        supabase.from('reservations').select('*').order('created_at', { ascending: false })
+      ]);
 
-      // 1. Buscar Clientes
-      console.log('[App] Buscando clientes...');
-      const { data: cData, error: cErr } = await supabase.from('clients').select('*').order('name');
-      if (cErr) console.error('[App] Erro Clientes:', cErr);
-      const currentClients = cData || [];
+      if (clientsRes.error) throw clientsRes.error;
+      if (vehiclesRes.error) throw vehiclesRes.error;
+      if (reservationsRes.error) throw reservationsRes.error;
+
+      const currentClients = clientsRes.data || [];
+      const currentVehicles = vehiclesRes.data || [];
+      
       setClients(currentClients);
-
-      // 2. Buscar Veículos
-      console.log('[App] Buscando veículos...');
-      const { data: vData, error: vErr } = await supabase.from('vehicles').select('*').order('model');
-      if (vErr) console.error('[App] Erro Veículos:', vErr);
-      const currentVehicles = vData || [];
       setVehicles(currentVehicles);
 
-      // 3. Buscar Reservas
-      console.log('[App] Buscando reservas...');
-      const { data: rData, error: rErr } = await supabase.from('reservations').select('*').order('created_at', { ascending: false });
-      if (rErr) console.error('[App] Erro Reservas:', rErr);
-      
-      if (rData) {
-        const transformed: Reservation[] = rData.map((r: any) => {
+      if (reservationsRes.data) {
+        const transformed: Reservation[] = reservationsRes.data.map((r: any) => {
           const client = currentClients.find(c => c.id === r.client_id);
           const vehicle = currentVehicles.find(v => v.id === r.vehicle_id);
           return {
@@ -84,35 +77,32 @@ const App: React.FC = () => {
         setReservations(transformed);
       }
 
-      console.log('[App] Sincronização concluída com sucesso.');
       if (isManual) toast.success('Dados atualizados!', { id: toastId });
     } catch (error: any) {
-      console.error('[App] Erro fatal no carregamento:', error);
-      if (isManual) toast.error(`Erro: ${error.message || 'Falha na conexão'}`, { id: toastId });
+      console.error('[App] Erro ao carregar dados:', error);
+      if (isManual) toast.error('Falha na sincronização. Tente novamente.', { id: toastId });
     } finally {
-      clearTimeout(safetyTimeout);
       setIsLoading(false);
+      isFetching.current = false;
     }
   }, [session?.user?.id]);
 
+  // Efeito principal de carregamento
   useEffect(() => {
     if (session?.user?.id) {
       fetchData();
-    } else {
-      setIsLoading(false);
     }
   }, [session?.user?.id, fetchData]);
 
-  // Atualizar dados quando a aba ganhar foco
+  // Auto-refresh ao voltar para a aba
   useEffect(() => {
-    const handleFocus = () => {
+    const handleVisibility = () => {
       if (document.visibilityState === 'visible' && session?.user?.id) {
-        console.log('[App] Aba focada, atualizando dados...');
         fetchData();
       }
     };
-    document.addEventListener('visibilitychange', handleFocus);
-    return () => document.removeEventListener('visibilitychange', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [session?.user?.id, fetchData]);
 
   if (authLoading) {
@@ -120,7 +110,7 @@ const App: React.FC = () => {
       <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <span className="animate-spin material-symbols-outlined text-5xl text-primary">progress_activity</span>
-          <p className="text-primary/60 font-bold animate-pulse">Iniciando Midas...</p>
+          <p className="text-primary/60 font-bold animate-pulse">Validando acesso...</p>
         </div>
       </div>
     );
@@ -153,7 +143,7 @@ const App: React.FC = () => {
             onAddReservation={() => setIsReservationModalOpen(true)}
             onViewProfile={() => setIsProfileModalOpen(true)}
           >
-            {/* Botão de Sincronização Manual */}
+            {/* Botão de Sincronização Manual Flutuante */}
             <button 
               onClick={() => fetchData(true)}
               className="fixed bottom-6 right-6 z-50 size-12 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
@@ -238,7 +228,7 @@ const App: React.FC = () => {
                           ...data[0],
                           clientName: client?.name || 'N/A',
                           vehicleModel: vehicle?.model || 'N/A',
-                          vehiclePlate: vehicle?.plate || 'N/A',
+                          vehiclePlate: vehicle?.plate || '---',
                           dateStr: new Date(data[0].created_at).toLocaleDateString('pt-BR')
                         };
                         setReservations(prev => prev.map(item => item.id === id ? transformed : item));
