@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Client } from '../types';
 import { clientSchema } from '../schemas/client.schema';
 import toast from 'react-hot-toast';
@@ -60,6 +60,34 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, onAddClient, onUpdat
     setEditingClient(null);
   };
 
+  const fetchAddressByCep = async (cep: string) => {
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length !== 8) return;
+
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      const data = await response.json();
+
+      if (data.erro) {
+        toast.error('CEP não encontrado.');
+        return;
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        street: data.logradouro.toUpperCase(),
+        neighborhood: data.bairro.toUpperCase(),
+        city: data.localidade.toUpperCase(),
+        state: data.uf.toUpperCase()
+      }));
+      
+      toast.success('Endereço preenchido automaticamente!');
+    } catch (error) {
+      console.error('Erro ao buscar CEP:', error);
+      toast.error('Erro ao buscar endereço pelo CEP.');
+    }
+  };
+
   const uploadFile = async (file: File, path: string) => {
     const fileExt = file.name.split('.').pop();
     const fileName = `${crypto.randomUUID()}.${fileExt}`;
@@ -97,10 +125,16 @@ const ClientsView: React.FC<ClientsViewProps> = ({ clients, onAddClient, onUpdat
   };
 
   const handleCepMask = (value: string) => {
-    return value
+    const masked = value
       .replace(/\D/g, '')
       .replace(/^(\d{5})(\d)/, '$1-$2')
       .slice(0, 9);
+    
+    if (masked.replace(/\D/g, '').length === 8) {
+      fetchAddressByCep(masked);
+    }
+    
+    return masked;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
