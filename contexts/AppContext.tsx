@@ -25,45 +25,50 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const initializeAuth = async () => {
             try {
-                // 1. Tenta recuperar a sessão existente de forma segura
+                // 1. Recupera a sessão de forma ultra rápida
                 const { data: { session: initialSession }, error } = await supabase.auth.getSession();
                 
                 if (error) throw error;
 
                 if (mounted) {
                     setSession(initialSession);
+                    // LIBERA A TELA IMEDIATAMENTE se houver sessão ou se não houver
+                    setLoading(false); 
+
+                    // 2. Busca o perfil em segundo plano (não trava a tela)
                     if (initialSession) {
-                        const { data: profileData } = await supabase
+                        supabase
                             .from('profiles')
                             .select('*')
                             .eq('id', initialSession.user.id)
-                            .single();
-                        
-                        if (profileData) setProfile(profileData as UserProfile);
+                            .single()
+                            .then(({ data }) => {
+                                if (mounted && data) setProfile(data as UserProfile);
+                            });
                     }
                 }
             } catch (err) {
                 console.error('[AuthContext] Erro na inicialização:', err);
-            } finally {
                 if (mounted) setLoading(false);
             }
         };
 
         initializeAuth();
 
-        // 2. Escuta mudanças de estado (Login/Logout/Refresh)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
             if (!mounted) return;
 
             setSession(currentSession);
             
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-                const { data } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', currentSession?.user.id)
-                    .single();
-                if (data) setProfile(data as UserProfile);
+                if (currentSession) {
+                    const { data } = await supabase
+                        .from('profiles')
+                        .select('*')
+                        .eq('id', currentSession.user.id)
+                        .single();
+                    if (data) setProfile(data as UserProfile);
+                }
             } else if (event === 'SIGNED_OUT') {
                 setProfile(null);
                 setSession(null);
