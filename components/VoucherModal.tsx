@@ -5,8 +5,9 @@ import html2pdf from 'html2pdf.js';
 // @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configuração do worker do PDF.js via CDN para evitar problemas de build
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Configuração do worker do PDF.js usando o padrão do Vite para máxima compatibilidade
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 interface VoucherModalProps {
   reservation: Reservation;
@@ -18,17 +19,25 @@ interface VoucherModalProps {
 const PdfToImage: React.FC<{ url: string }> = ({ url }) => {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const renderPdf = async () => {
       try {
         setLoading(true);
-        const loadingTask = pdfjsLib.getDocument(url);
+        setError(false);
+        
+        // Carrega o documento com suporte a CORS
+        const loadingTask = pdfjsLib.getDocument({
+          url: url,
+          withCredentials: false
+        });
+        
         const pdf = await loadingTask.promise;
         const page = await pdf.getPage(1);
         
-        const viewport = page.getViewport({ scale: 1.5 });
+        const viewport = page.getViewport({ scale: 2.0 });
         const canvas = canvasRef.current;
         if (!canvas) return;
         
@@ -46,7 +55,8 @@ const PdfToImage: React.FC<{ url: string }> = ({ url }) => {
         setImageSrc(canvas.toDataURL('image/png'));
         setLoading(false);
       } catch (err) {
-        console.error('Erro ao renderizar PDF para imagem:', err);
+        console.error('Erro ao renderizar PDF:', err);
+        setError(true);
         setLoading(false);
       }
     };
@@ -56,27 +66,40 @@ const PdfToImage: React.FC<{ url: string }> = ({ url }) => {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2">
-        <span className="animate-spin material-symbols-outlined text-primary">progress_activity</span>
-        <p className="text-[10px] font-bold text-slate-400 uppercase">Processando Documento...</p>
+      <div className="flex flex-col items-center justify-center gap-3 p-8">
+        <div className="size-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Processando PDF...</p>
       </div>
     );
   }
 
-  if (!imageSrc) {
+  if (error) {
     return (
-      <div className="text-center p-4">
-        <span className="material-symbols-outlined text-rose-500 text-3xl">error</span>
-        <p className="text-[10px] font-bold text-slate-500 uppercase mt-2">Erro ao carregar visualização</p>
+      <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
+        <div className="size-12 bg-rose-50 rounded-full flex items-center justify-center">
+          <span className="material-symbols-outlined text-rose-500">picture_as_pdf</span>
+        </div>
+        <div>
+          <p className="text-[10px] font-black text-slate-600 uppercase">Documento PDF</p>
+          <a 
+            href={url} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="mt-2 inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-white rounded-lg text-[9px] font-bold uppercase hover:brightness-110 transition-all"
+          >
+            <span className="material-symbols-outlined text-xs">open_in_new</span>
+            Visualizar Original
+          </a>
+        </div>
       </div>
     );
   }
 
   return (
-    <>
+    <div className="w-full h-full flex items-center justify-center bg-white">
       <canvas ref={canvasRef} className="hidden" />
-      <img src={imageSrc} alt="PDF Preview" className="max-h-full max-w-full object-contain" />
-    </>
+      <img src={imageSrc!} alt="PDF Preview" className="max-h-full max-w-full object-contain shadow-sm" />
+    </div>
   );
 };
 
