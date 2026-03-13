@@ -67,7 +67,30 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
     }
   };
 
-  // Usamos o total_value salvo no banco, que já inclui serviços e descontos
+  const renderDocument = (url?: string, label?: string) => {
+    if (!url) return <p className="text-slate-300 font-bold italic">Documento não disponível</p>;
+    
+    const isPdf = url.toLowerCase().endsWith('.pdf');
+    
+    if (isPdf) {
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 relative group">
+          <iframe 
+            src={`${url}#toolbar=0&navpanes=0&scrollbar=0`} 
+            className="w-full h-full border-none pointer-events-none"
+            title={`Preview ${label}`}
+          />
+          <div className="absolute inset-0 flex items-center justify-center bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity">
+             <span className="bg-white px-3 py-1 rounded-full text-[10px] font-black text-primary shadow-sm">PDF</span>
+          </div>
+          <div className="absolute bottom-2 right-2 bg-primary text-white px-2 py-0.5 rounded text-[8px] font-black uppercase">PDF</div>
+        </div>
+      );
+    }
+    
+    return <img src={url} crossOrigin="anonymous" className="max-h-full max-w-full w-auto h-auto object-contain" />;
+  };
+
   const totalReserva = reservation.total_value;
 
   return (
@@ -255,34 +278,22 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
             <div className="space-y-[10mm] flex-1">
               <div className="space-y-3">
                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest text-center">Carteira Nacional de Habilitação (CNH)</p>
-                <div className="h-[65mm] w-full bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden p-2">
-                  {client?.cnh_url ? (
-                    <img src={client.cnh_url} crossOrigin="anonymous" className="max-h-full max-w-full w-auto h-auto object-contain" />
-                  ) : (
-                    <p className="text-slate-300 font-bold italic">Imagem da CNH não disponível</p>
-                  )}
+                <div className="h-[65mm] w-full bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden p-2 relative">
+                  {renderDocument(client?.cnh_url, 'CNH')}
                 </div>
               </div>
 
               <div className="space-y-3">
                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest text-center">Comprovante de Residência</p>
-                <div className="h-[65mm] w-full bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden p-2">
-                  {client?.address_proof_url ? (
-                    <img src={client.address_proof_url} crossOrigin="anonymous" className="max-h-full max-w-full w-auto h-auto object-contain" />
-                  ) : (
-                    <p className="text-slate-300 font-bold italic">Comprovante de residência não disponível</p>
-                  )}
+                <div className="h-[65mm] w-full bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden p-2 relative">
+                  {renderDocument(client?.address_proof_url, 'Comprovante')}
                 </div>
               </div>
 
               <div className="space-y-3">
                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest text-center">Selfie com Documento</p>
-                <div className="h-[65mm] w-full bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden p-2">
-                  {client?.selfie_url ? (
-                    <img src={client.selfie_url} crossOrigin="anonymous" className="max-h-full max-w-full w-auto h-auto object-contain" />
-                  ) : (
-                    <p className="text-slate-300 font-bold italic">Selfie não disponível</p>
-                  )}
+                <div className="h-[65mm] w-full bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden p-2 relative">
+                  {renderDocument(client?.selfie_url, 'Selfie')}
                 </div>
               </div>
             </div>
@@ -363,11 +374,11 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-y-4">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                   {reservation.insurance_details?.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-3 border-b border-emerald-100 pb-3">
-                      <span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span>
-                      <span className="text-[11px] font-bold text-slate-700 uppercase leading-tight">{item.name}</span>
+                    <div key={idx} className="flex items-center gap-2 border-b border-emerald-50/50 pb-1">
+                      <span className="material-symbols-outlined text-emerald-600 text-[14px]">check_circle</span>
+                      <span className="text-[9px] font-bold text-slate-700 uppercase leading-tight">{item.name}</span>
                     </div>
                   ))}
                 </div>
