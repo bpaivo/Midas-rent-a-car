@@ -24,6 +24,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         let mounted = true;
 
         const initializeAuth = async () => {
+            // Timeout de segurança: se em 6 segundos não validar, libera a tela
+            // para evitar que o usuário fique preso no 'Validando acesso...'
+            const safetyTimeout = setTimeout(() => {
+                if (mounted && loading) {
+                    console.warn('[AuthContext] Timeout de segurança atingido na inicialização.');
+                    setLoading(false);
+                }
+            }, 6000);
+
             try {
                 // 1. Recupera a sessão de forma ultra rápida
                 const { data: { session: initialSession }, error } = await supabase.auth.getSession();
@@ -34,6 +43,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     setSession(initialSession);
                     // LIBERA A TELA IMEDIATAMENTE se houver sessão ou se não houver
                     setLoading(false); 
+                    clearTimeout(safetyTimeout);
 
                     // 2. Busca o perfil em segundo plano (não trava a tela)
                     if (initialSession) {
@@ -49,7 +59,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }
             } catch (err) {
                 console.error('[AuthContext] Erro na inicialização:', err);
-                if (mounted) setLoading(false);
+                if (mounted) {
+                    setLoading(false);
+                    clearTimeout(safetyTimeout);
+                }
             }
         };
 

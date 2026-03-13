@@ -27,7 +27,7 @@ import ProfileModal from './components/ProfileModal';
 const createSafeMutation = async <T extends any>(promiseOrBuilder: PromiseLike<T>): Promise<T> => {
   let timeoutId: NodeJS.Timeout;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Conexão instável ou Sessão Expirada. O banco de dados não respondeu a tempo.')), 8000);
+    timeoutId = setTimeout(() => reject(new Error('Conexão instável ou Sessão Expirada. O banco de dados não respondeu a tempo.')), 12000);
   });
   try {
     const result = await Promise.race([Promise.resolve(promiseOrBuilder), timeoutPromise]);
@@ -74,7 +74,8 @@ const MainContent: React.FC = () => {
 
       let timeoutId: NodeJS.Timeout;
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('Auth Timeout')), 10000);
+        // Aumentado para 25 segundos para conexões mais lentas
+        timeoutId = setTimeout(() => reject(new Error('Data Fetch Timeout')), 25000);
       });
 
       const [clientsRes, vehiclesRes, reservationsRes] = await Promise.race([fetchPromise, timeoutPromise]) as any;
@@ -108,22 +109,23 @@ const MainContent: React.FC = () => {
       if (isManual) toast.success('Dados atualizados!', { id: toastId });
     } catch (error: any) {
       console.error('[App] Erro ao carregar dados:', error);
-      if (error.message === 'Auth Timeout') {
-        toast.error('O carregamento demorou demais. Refazendo login para tentar reconectar...');
-        logout();
+      
+      if (error.message === 'Data Fetch Timeout') {
+        toast.error('A conexão com o banco de dados está lenta. Tente atualizar a página.', { id: toastId || undefined });
       } else if (error.code === 'PGRST301' || error.message?.includes('JWT') || error.message?.includes('Sessão Expirada')) {
-        toast.error('Sua sessão expirou por inatividade. Faça login novamente.');
+        toast.error('Sua sessão expirou. Faça login novamente.');
         logout();
       } else {
-        toast.error(`Falha técnica ao carregar dados: ${error.message || 'Erro desconhecido'}`, { id: toastId || undefined });
+        // Não desloga em erros genéricos para evitar loops de login
+        toast.error(`Erro ao carregar dados: ${error.message || 'Verifique sua conexão'}`, { id: toastId || undefined });
       }
     } finally {
       setIsLoading(false);
       isFetching.current = false;
     }
-  }, [session?.user?.id]);
+  }, [session?.user?.id, logout]);
 
-  // Busca inicial pura - rodará apenas UMA vez porque esse MainContent só é montado após a aprovação do Guard
+  // Busca inicial pura
   useEffect(() => {
     isFetching.current = false;
     fetchData();
