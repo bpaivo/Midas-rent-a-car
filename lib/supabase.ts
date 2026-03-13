@@ -9,6 +9,6 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storageKey: 'midas-auth-token' // Chave única para evitar conflitos de cache
+    storageKey: 'midas-auth-token'
   }
 });

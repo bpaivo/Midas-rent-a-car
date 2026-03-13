@@ -6,6 +6,11 @@ export enum ReservationStatus {
   PERDIDA = 'reserva perdida'
 }
 
+export type VehicleChecklist = Record<string, {
+  hasIssue: boolean;
+  observation: string;
+}>;
+
 export interface Client {
   id: string;
   name: string;
@@ -68,6 +73,12 @@ export interface Reservation {
   insurance_value: number;
   additional_services: string;
   observations?: string;
+  pickup_photos?: string[];
+  actual_pickup_date?: string;
+  pickup_checklist?: VehicleChecklist;
+  return_photos?: string[];
+  actual_return_date?: string;
+  return_checklist?: VehicleChecklist;
   // UI Helper fields (not in DB)
   clientName?: string;
   vehicleModel?: string;

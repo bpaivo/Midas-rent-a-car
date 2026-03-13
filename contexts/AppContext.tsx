@@ -25,8 +25,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const initializeAuth = async () => {
             try {
-                // 1. Recupera a sessão de forma ultra rápida
-                const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+                // 1. Recupera a sessão 
+
+                const sessionPromise = supabase.auth.getSession();
+                
+                let timeoutId: NodeJS.Timeout;
+                const timeoutPromise = new Promise((_, reject) => {
+                    timeoutId = setTimeout(() => reject(new Error('Auth Timeout')), 4000);
+                });
+                
+                const { data: { session: initialSession }, error } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+                clearTimeout(timeoutId!);
                 
                 if (error) throw error;
 
@@ -47,9 +56,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             });
                     }
                 }
-            } catch (err) {
+            } catch (err: any) {
                 console.error('[AuthContext] Erro na inicialização:', err);
-                if (mounted) setLoading(false);
+                
+                if (err.message !== 'Auth Timeout') {
+                    await supabase.auth.signOut().catch(console.error);
+                }
+                
+                if (mounted) {
+                    setSession(null);
+                    setProfile(null);
+                    setLoading(false);
+                }
             }
         };
 

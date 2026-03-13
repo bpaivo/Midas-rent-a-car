@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { Reservation, ReservationStatus } from '../types';
+import { Reservation, ReservationStatus, VehicleChecklist } from '../types';
 import { reservationSchema } from '../schemas/reservation.schema';
 import { TableSkeleton } from '../components/LoadingSkeleton';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
+
+const defaultChecklistItems = ['Lataria', 'Motor', 'Pneus', 'Interior', 'Vidros', 'Acessórios'];
 
 interface ReservationsViewProps {
   reservations: Reservation[];
@@ -22,6 +25,8 @@ const ReservationsView: React.FC<ReservationsViewProps> = ({
   isLoading
 }) => {
   const [editingRes, setEditingRes] = useState<Reservation | null>(null);
+  const [processingPickupRes, setProcessingPickupRes] = useState<Reservation | null>(null);
+  const [processingReturnRes, setProcessingReturnRes] = useState<Reservation | null>(null);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -170,6 +175,30 @@ const ReservationsView: React.FC<ReservationsViewProps> = ({
 
                           {activeMenu === res.id && (
                             <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 z-50 py-1 overflow-hidden animate-in fade-in zoom-in duration-200 origin-top-right">
+                              {res.status === 'aguardando retirada' && (
+                                <button
+                                  onClick={() => {
+                                    setProcessingPickupRes(res);
+                                    setActiveMenu(null);
+                                  }}
+                                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-emerald-600 dark:text-emerald-400 font-bold hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+                                >
+                                  <span className="material-symbols-outlined text-lg">key</span>
+                                  Concluir Retirada
+                                </button>
+                              )}
+                              {res.status === 'locação em uso' && (
+                                <button
+                                  onClick={() => {
+                                    setProcessingReturnRes(res);
+                                    setActiveMenu(null);
+                                  }}
+                                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                                >
+                                  <span className="material-symbols-outlined text-lg">assignment_turned_in</span>
+                                  Concluir Locação
+                                </button>
+                              )}
                               <button
                                 onClick={() => {
                                   setEditingRes(res);
@@ -228,6 +257,20 @@ const ReservationsView: React.FC<ReservationsViewProps> = ({
         <EditReservationModal
           reservation={editingRes}
           onClose={() => setEditingRes(null)}
+          onUpdate={onUpdateReservation}
+        />
+      )}
+      {processingPickupRes && (
+        <PickupModal
+          reservation={processingPickupRes}
+          onClose={() => setProcessingPickupRes(null)}
+          onUpdate={onUpdateReservation}
+        />
+      )}
+      {processingReturnRes && (
+        <ReturnModal
+          reservation={processingReturnRes}
+          onClose={() => setProcessingReturnRes(null)}
           onUpdate={onUpdateReservation}
         />
       )}
@@ -421,6 +464,430 @@ const EditReservationModal: React.FC<EditReservationModalProps> = ({ reservation
               className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:brightness-110 disabled:opacity-50"
             >
               {isSubmitting ? 'Salvando...' : 'Salvar Alterações'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+interface PickupModalProps {
+  reservation: Reservation;
+  onClose: () => void;
+  onUpdate: (id: string, updates: Partial<Reservation>) => Promise<void>;
+}
+
+const PickupModal: React.FC<PickupModalProps> = ({ reservation, onClose, onUpdate }) => {
+  const [actualPickupDate, setActualPickupDate] = useState(() => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 16);
+  });
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [checklist, setChecklist] = useState<VehicleChecklist>(
+    defaultChecklistItems.reduce((acc, item) => ({ ...acc, [item]: { hasIssue: false, observation: '' } }), {})
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setPhotos(Array.from(e.target.files));
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadPhotos = async () => {
+    const urls: string[] = [];
+    for (const file of photos) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
+      const filePath = `vehicles/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('clients-docs')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('clients-docs')
+        .getPublicUrl(filePath);
+
+      urls.push(data.publicUrl);
+    }
+    return urls;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!actualPickupDate) {
+      toast.error('Informe a data e hora real da retirada.');
+      return;
+    }
+
+    // Validação obrigatória: se temIssue for true, a observação não pode ser vazia
+    const itemsComEdicaoPendete = Object.entries(checklist).filter(([_, data]) => data.hasIssue && !data.observation.trim());
+    if (itemsComEdicaoPendete.length > 0) {
+      toast.error(`Descreva a avaria para: ${itemsComEdicaoPendete.map(([item]) => item).join(', ')}`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    const loadingToast = toast.loading('Processando retirada e enviando fotos...');
+
+    try {
+      let photoUrls: string[] = [];
+      if (photos.length > 0) {
+        photoUrls = await uploadPhotos();
+      }
+
+      await onUpdate(reservation.id, {
+        status: ReservationStatus.EM_USO,
+        actual_pickup_date: new Date(actualPickupDate).toISOString(),
+        pickup_photos: photoUrls,
+        pickup_checklist: checklist
+      });
+
+      toast.success('Retirada concluída com sucesso!', { id: loadingToast });
+      onClose();
+    } catch (error: any) {
+      console.error('Erro na retirada:', error);
+      toast.error('Erro ao processar retirada: ' + (error.message || 'Falha na conexão'), { id: loadingToast });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] animate-in fade-in zoom-in duration-300">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50 sticky top-0 z-10 backdrop-blur-md">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span className="material-symbols-outlined text-emerald-500">key</span>
+            Concluir Retirada
+          </h2>
+          <button onClick={onClose} disabled={isSubmitting} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors disabled:opacity-50">
+            <span className="material-symbols-outlined text-slate-400">close</span>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="text-sm text-slate-500 dark:text-slate-400 mb-2">Resumo da Reserva</div>
+            <div className="font-bold text-slate-900 dark:text-white">{reservation.clientName}</div>
+            <div className="text-sm text-slate-600 dark:text-slate-300">Veículo: {reservation.vehicleModel} - {reservation.vehiclePlate}</div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Data/Hora Real da Retirada</label>
+            <input
+              type="datetime-local"
+              className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm focus:ring-2 focus:ring-primary"
+              value={actualPickupDate}
+              onChange={e => setActualPickupDate(e.target.value)}
+              required
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Fotos do Veículo (Check-in)</label>
+            <div className="flex items-center justify-center w-full">
+              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg cursor-pointer bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:border-slate-500 transition-all">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6 text-slate-500 dark:text-slate-400">
+                  <span className="material-symbols-outlined text-3xl mb-1">add_a_photo</span>
+                  <p className="text-xs font-semibold">Clique para adicionar fotos</p>
+                </div>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  disabled={isSubmitting}
+                />
+              </label>
+            </div>
+            
+            {photos.length > 0 && (
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {photos.map((photo, index) => (
+                  <div key={index} className="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 aspect-square">
+                    <img src={URL.createObjectURL(photo)} alt={`preview-${index}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(index)}
+                      className="absolute top-1 right-1 bg-rose-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <span className="material-symbols-outlined text-xs">close</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[10px] text-slate-400 text-right">{photos.length} foto(s) selecionada(s)</p>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+              disabled={isSubmitting}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-bold shadow-lg shadow-emerald-500/20 hover:brightness-110 disabled:opacity-50 transition flex items-center justify-center gap-2"
+            >
+              {isSubmitting ? (
+                <span className="animate-spin material-symbols-outlined text-sm">progress_activity</span>
+              ) : (
+                <span className="material-symbols-outlined text-sm">check</span>
+              )}
+              Confirmar Retirada
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+interface ReturnModalProps {
+  reservation: Reservation;
+  onClose: () => void;
+  onUpdate: (id: string, updates: Partial<Reservation>) => Promise<void>;
+}
+
+const ReturnModal: React.FC<ReturnModalProps> = ({ reservation, onClose, onUpdate }) => {
+  const [actualReturnDate, setActualReturnDate] = useState(() => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 16);
+  });
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [checklist, setChecklist] = useState<VehicleChecklist>(
+    defaultChecklistItems.reduce((acc, item) => ({ ...acc, [item]: { hasIssue: false, observation: '' } }), {})
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setPhotos(Array.from(e.target.files));
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadPhotos = async () => {
+    const urls: string[] = [];
+    for (const file of photos) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
+      const filePath = `vehicles/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('clients-docs')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('clients-docs')
+        .getPublicUrl(filePath);
+
+      urls.push(data.publicUrl);
+    }
+    return urls;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!actualReturnDate) {
+      toast.error('Informe a data e hora real da devolução.');
+      return;
+    }
+
+    // Validação obrigatória: se temIssue for true, a observação não pode ser vazia
+    const itemsComEdicaoPendete = Object.entries(checklist).filter(([_, data]) => data.hasIssue && !data.observation.trim());
+    if (itemsComEdicaoPendete.length > 0) {
+      toast.error(`Descreva a avaria para: ${itemsComEdicaoPendete.map(([item]) => item).join(', ')}`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    const loadingToast = toast.loading('Processando devolução e enviando fotos...');
+
+    try {
+      let photoUrls: string[] = [];
+      if (photos.length > 0) {
+        photoUrls = await uploadPhotos();
+      }
+
+      await onUpdate(reservation.id, {
+        status: ReservationStatus.CONCLUIDO,
+        actual_return_date: new Date(actualReturnDate).toISOString(),
+        return_photos: photoUrls,
+        return_checklist: checklist
+      });
+
+      toast.success('Devolução concluída com sucesso!', { id: loadingToast });
+      onClose();
+    } catch (error: any) {
+      console.error('Erro na devolução:', error);
+      toast.error('Erro ao processar devolução: ' + (error.message || 'Falha na conexão'), { id: loadingToast });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] animate-in fade-in zoom-in duration-300">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50 sticky top-0 z-10 backdrop-blur-md">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span className="material-symbols-outlined text-indigo-500">assignment_turned_in</span>
+            Concluir Locação
+          </h2>
+          <button onClick={onClose} disabled={isSubmitting} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors disabled:opacity-50">
+            <span className="material-symbols-outlined text-slate-400">close</span>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="text-sm text-slate-500 dark:text-slate-400 mb-2">Resumo da Devolução</div>
+            <div className="font-bold text-slate-900 dark:text-white">{reservation.clientName}</div>
+            <div className="text-sm text-slate-600 dark:text-slate-300">Veículo: {reservation.vehicleModel} - {reservation.vehiclePlate}</div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Data/Hora Real da Devolução</label>
+            <input
+              type="datetime-local"
+              className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm focus:ring-2 focus:ring-primary"
+              value={actualReturnDate}
+              onChange={e => setActualReturnDate(e.target.value)}
+              required
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Fotos do Veículo (Check-out)</label>
+            <div className="flex items-center justify-center w-full">
+              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg cursor-pointer bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:border-slate-500 transition-all">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6 text-slate-500 dark:text-slate-400">
+                  <span className="material-symbols-outlined text-3xl mb-1">add_a_photo</span>
+                  <p className="text-xs font-semibold">Clique para adicionar fotos</p>
+                </div>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  disabled={isSubmitting}
+                />
+              </label>
+            </div>
+            
+            {photos.length > 0 && (
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {photos.map((photo, index) => (
+                  <div key={index} className="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 aspect-square">
+                    <img src={URL.createObjectURL(photo)} alt={`preview-${index}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(index)}
+                      className="absolute top-1 right-1 bg-rose-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <span className="material-symbols-outlined text-xs">close</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[10px] text-slate-400 text-right">{photos.length} foto(s) selecionada(s)</p>
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Check-list de Integridade (Check-out)</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {defaultChecklistItems.map((item) => (
+                <div key={item} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{item}</span>
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => setChecklist(prev => ({
+                        ...prev, [item]: { ...prev[item], hasIssue: !prev[item].hasIssue }
+                      }))}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 ${checklist[item].hasIssue ? 'bg-amber-500' : 'bg-indigo-500'}`}
+                    >
+                      <span className="sr-only">Toggle {item} status</span>
+                      <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out flex items-center justify-center ${checklist[item].hasIssue ? 'translate-x-5' : 'translate-x-0'}`}>
+                        {checklist[item].hasIssue ? (
+                          <span className="material-symbols-outlined text-[12px] text-amber-500">warning</span>
+                        ) : (
+                          <span className="material-symbols-outlined text-[12px] text-indigo-500">check</span>
+                        )}
+                      </span>
+                    </button>
+                  </div>
+                  <div className={`text-xs mb-2 ${checklist[item].hasIssue ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                    {checklist[item].hasIssue ? 'Avaria/Obs identificada' : 'Em perfeitas condições'}
+                  </div>
+                  {checklist[item].hasIssue && (
+                    <div className="animate-in fade-in slide-in-from-top-2 duration-300 pt-2 border-t border-slate-200 dark:border-slate-700">
+                      <textarea
+                        className="w-full text-xs p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent placeholder:text-slate-400"
+                        placeholder="Descreva detalhadamente a condição desta parte do veículo..."
+                        value={checklist[item].observation}
+                        onChange={(e) => setChecklist(prev => ({
+                          ...prev, [item]: { ...prev[item], observation: e.target.value }
+                        }))}
+                        disabled={isSubmitting}
+                        rows={2}
+                        required
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+              disabled={isSubmitting}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-indigo-600/20 hover:brightness-110 disabled:opacity-50 transition flex items-center justify-center gap-2"
+            >
+              {isSubmitting ? (
+                <span className="animate-spin material-symbols-outlined text-sm">progress_activity</span>
+              ) : (
+                <span className="material-symbols-outlined text-sm">check</span>
+              )}
+              Confirmar Devolução
             </button>
           </div>
         </form>

@@ -9,6 +9,18 @@ export const reservationSchema = z.object({
     security_deposit: z.number().min(0),
     insurance_value: z.number().min(0),
     additional_services: z.string().optional(),
+    pickup_photos: z.array(z.string()).optional(),
+    actual_pickup_date: z.string().optional(),
+    pickup_checklist: z.record(z.string(), z.object({
+        hasIssue: z.boolean(),
+        observation: z.string()
+    })).optional(),
+    return_photos: z.array(z.string()).optional(),
+    actual_return_date: z.string().optional(),
+    return_checklist: z.record(z.string(), z.object({
+        hasIssue: z.boolean(),
+        observation: z.string()
+    })).optional(),
     status: z.string(),
     days: z.number().min(1),
     total_value: z.number().min(0)

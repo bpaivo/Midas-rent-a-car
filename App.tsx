@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { Client, Vehicle, Reservation } from './types';
 import { Toaster } from 'react-hot-toast';
@@ -23,8 +23,25 @@ import VoucherModal from './components/VoucherModal';
 import ReservationModal from './components/ReservationModal';
 import ProfileModal from './components/ProfileModal';
 
-const App: React.FC = () => {
-  const { session, profile, isDarkMode, toggleDarkMode, logout, loading: authLoading } = useApp();
+// Helper de Mutação Segura contra Travamentos do Supabase
+const createSafeMutation = async <T extends any>(promiseOrBuilder: PromiseLike<T>): Promise<T> => {
+  let timeoutId: NodeJS.Timeout;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Conexão instável ou Sessão Expirada. O banco de dados não respondeu a tempo.')), 8000);
+  });
+  try {
+    const result = await Promise.race([Promise.resolve(promiseOrBuilder), timeoutPromise]);
+    return result;
+  } finally {
+    clearTimeout(timeoutId!);
+  }
+};
+
+// ==========================================
+// CAMADA PRINCIPAL DE DADOS (MONTA O ESTADO LIMPO A CADA LOGIN)
+// ==========================================
+const MainContent: React.FC = () => {
+  const { session, profile, isDarkMode, toggleDarkMode, logout } = useApp();
   const [selectedVoucherRes, setSelectedVoucherRes] = useState<Reservation | null>(null);
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -37,20 +54,31 @@ const App: React.FC = () => {
   
   const isFetching = useRef(false);
 
-  const fetchData = useCallback(async (isManual = false) => {
+  const fetchData = useCallback(async (options: { isManual?: boolean, silent?: boolean } = {}) => {
+    const { isManual = false, silent = false } = options;
     if (!session?.user?.id || isFetching.current) return;
     
     isFetching.current = true;
     const toastId = isManual ? toast.loading('Sincronizando dados...') : null;
-    setIsLoading(true);
+    
+    if (!silent) {
+      setIsLoading(true);
+    }
 
     try {
-      // Buscas paralelas para maior velocidade
-      const [clientsRes, vehiclesRes, reservationsRes] = await Promise.all([
-        supabase.from('clients').select('*').order('name'),
-        supabase.from('vehicles').select('*').order('model'),
-        supabase.from('reservations').select('*').order('created_at', { ascending: false })
+      const fetchPromise = Promise.all([
+        supabase.from('clients').select('*').order('name').limit(1500),
+        supabase.from('vehicles').select('*').order('model').limit(500),
+        supabase.from('reservations').select('*').order('created_at', { ascending: false }).limit(800)
       ]);
+
+      let timeoutId: NodeJS.Timeout;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Auth Timeout')), 10000);
+      });
+
+      const [clientsRes, vehiclesRes, reservationsRes] = await Promise.race([fetchPromise, timeoutPromise]) as any;
+      clearTimeout(timeoutId!);
 
       if (clientsRes.error) throw clientsRes.error;
       if (vehiclesRes.error) throw vehiclesRes.error;
@@ -80,30 +108,220 @@ const App: React.FC = () => {
       if (isManual) toast.success('Dados atualizados!', { id: toastId });
     } catch (error: any) {
       console.error('[App] Erro ao carregar dados:', error);
-      if (isManual) toast.error('Falha na sincronização. Tente novamente.', { id: toastId });
+      if (error.message === 'Auth Timeout') {
+        toast.error('O carregamento demorou demais. Refazendo login para tentar reconectar...');
+        logout();
+      } else if (error.code === 'PGRST301' || error.message?.includes('JWT') || error.message?.includes('Sessão Expirada')) {
+        toast.error('Sua sessão expirou por inatividade. Faça login novamente.');
+        logout();
+      } else {
+        toast.error(`Falha técnica ao carregar dados: ${error.message || 'Erro desconhecido'}`, { id: toastId || undefined });
+      }
     } finally {
       setIsLoading(false);
       isFetching.current = false;
     }
   }, [session?.user?.id]);
 
-  // Efeito principal de carregamento
+  // Busca inicial pura - rodará apenas UMA vez porque esse MainContent só é montado após a aprovação do Guard
   useEffect(() => {
-    if (session?.user?.id) {
-      fetchData();
-    }
-  }, [session?.user?.id, fetchData]);
+    isFetching.current = false;
+    fetchData();
+  }, [fetchData]);
 
   // Auto-refresh ao voltar para a aba
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && session?.user?.id) {
-        fetchData();
+        fetchData({ silent: true });
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [session?.user?.id, fetchData]);
+
+  const userRole = profile?.role || 'user';
+
+  return (
+    <Layout
+      onLogout={logout}
+      isDarkMode={isDarkMode}
+      toggleDarkMode={toggleDarkMode}
+      userProfile={profile}
+      onAddReservation={() => setIsReservationModalOpen(true)}
+      onViewProfile={() => setIsProfileModalOpen(true)}
+    >
+      <button 
+        onClick={() => fetchData({ isManual: true })}
+        className="fixed bottom-6 right-6 z-50 size-12 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
+        title="Sincronizar agora"
+      >
+        <span className="material-symbols-outlined group-hover:rotate-180 transition-transform duration-500">sync</span>
+      </button>
+
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={
+            <Dashboard
+              isLoading={isLoading}
+              stats={{
+                available: vehicles.filter(v => v.status === 'Disponível').length,
+                rented: vehicles.filter(v => v.status === 'Alugado').length,
+                total: vehicles.filter(v => v.status !== 'Desativado').length,
+                maintenance: vehicles.filter(v => v.status === 'Em manutenção').length
+              }}
+              recentReservations={reservations.slice(0, 4)}
+            />
+          } />
+          <Route path="/clients" element={
+            <ClientsView
+              clients={clients}
+              isLoading={isLoading}
+              onAddClient={async (c) => {
+                const { data, error } = await createSafeMutation(supabase.from('clients').insert([c]).select());
+                if (error) throw error;
+                if (data && data[0]) setClients(prev => [data[0], ...prev]);
+              }}
+              onUpdateClient={async (id, c) => {
+                const { data, error } = await createSafeMutation(supabase.from('clients').update(c).eq('id', id).select());
+                if (error) throw error;
+                if (data && data[0]) setClients(prev => prev.map(item => item.id === id ? data[0] : item));
+              }}
+              onDeleteClient={async (id) => {
+                const { error } = await createSafeMutation(supabase.from('clients').delete().eq('id', id));
+                if (error) throw error;
+                setClients(prev => prev.filter(item => item.id !== id));
+              }}
+            />
+          } />
+          <Route path="/vehicles" element={
+            <VehiclesView
+              vehicles={vehicles}
+              isLoading={isLoading}
+              onAddVehicle={async (v) => {
+                const { data, error } = await createSafeMutation(supabase.from('vehicles').insert([v]).select());
+                if (error) throw error;
+                if (data && data[0]) setVehicles(prev => [data[0], ...prev]);
+              }}
+              onUpdateVehicle={async (id, v) => {
+                const { data, error } = await createSafeMutation(supabase.from('vehicles').update(v).eq('id', id).select());
+                if (error) throw error;
+                if (data && data[0]) setVehicles(prev => prev.map(item => item.id === id ? data[0] : item));
+              }}
+              onDeleteVehicle={async (id) => {
+                const { error } = await createSafeMutation(supabase.from('vehicles').delete().eq('id', id));
+                if (error) throw error;
+                setVehicles(prev => prev.filter(item => item.id !== id));
+              }}
+            />
+          } />
+          <Route path="/reservations" element={
+            <ReservationsView
+              reservations={reservations}
+              isLoading={isLoading}
+              onEmitVoucher={setSelectedVoucherRes}
+              onUpdateReservation={async (id, updates) => {
+                const { data, error } = await createSafeMutation(supabase
+                  .from('reservations')
+                  .update(updates)
+                  .eq('id', id)
+                  .select('*'));
+                if (error) throw error;
+                if (data && data[0]) {
+                  const client = clients.find(c => c.id === data[0].client_id);
+                  const vehicle = vehicles.find(v => v.id === data[0].vehicle_id);
+                  const transformed = {
+                    ...data[0],
+                    clientName: client?.name || 'N/A',
+                    vehicleModel: vehicle?.model || 'N/A',
+                    vehiclePlate: vehicle?.plate || '---',
+                    dateStr: new Date(data[0].created_at).toLocaleDateString('pt-BR')
+                  };
+                  setReservations(prev => prev.map(item => item.id === id ? transformed : item));
+                }
+              }}
+              onAddReservation={async (r) => {
+                const { data, error } = await createSafeMutation(supabase
+                  .from('reservations')
+                  .insert([r])
+                  .select('*'));
+                if (error) throw error;
+                if (data && data[0]) {
+                  const client = clients.find(c => c.id === data[0].client_id);
+                  const vehicle = vehicles.find(v => v.id === data[0].vehicle_id);
+                  const transformed = {
+                    ...data[0],
+                    clientName: client?.name || 'N/A',
+                    vehicleModel: vehicle?.model || 'N/A',
+                    vehiclePlate: vehicle?.plate || 'N/A',
+                    dateStr: new Date(data[0].created_at).toLocaleDateString('pt-BR')
+                  };
+                  setReservations(prev => [transformed, ...prev]);
+                }
+              }}
+              onDeleteReservation={async (id) => {
+                const { error } = await createSafeMutation(supabase.from('reservations').delete().eq('id', id));
+                if (error) throw error;
+                setReservations(prev => prev.filter(item => item.id !== id));
+              }}
+            />
+          } />
+          <Route path="/users" element={userRole === 'admin' ? <UsersView /> : <Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </ErrorBoundary>
+
+      {selectedVoucherRes && (
+        <VoucherModal
+          reservation={selectedVoucherRes}
+          client={clients.find(c => c.id === selectedVoucherRes.client_id)}
+          vehicle={vehicles.find(v => v.id === selectedVoucherRes.vehicle_id)}
+          onClose={() => setSelectedVoucherRes(null)}
+        />
+      )}
+
+      {isReservationModalOpen && (
+        <ReservationModal
+          clients={clients}
+          vehicles={vehicles}
+          onClose={() => setIsReservationModalOpen(false)}
+          onSave={async (r) => {
+            const { data, error } = await createSafeMutation(supabase
+              .from('reservations')
+              .insert([r])
+              .select('*'));
+            if (error) throw error;
+            if (data && data[0]) {
+              const client = clients.find(c => c.id === data[0].client_id);
+              const vehicle = vehicles.find(v => v.id === data[0].vehicle_id);
+              const transformed = {
+                ...data[0],
+                clientName: client?.name || 'N/A',
+                vehicleModel: vehicle?.model || 'N/A',
+                vehiclePlate: vehicle?.plate || 'N/A',
+                dateStr: new Date(data[0].created_at).toLocaleDateString('pt-BR')
+              };
+              setReservations(prev => [transformed, ...prev]);
+              toast.success('Reserva confirmada!');
+              setIsReservationModalOpen(false);
+            }
+          }}
+        />
+      )}
+
+      {isProfileModalOpen && (
+        <ProfileModal userProfile={profile} onClose={() => setIsProfileModalOpen(false)} />
+      )}
+    </Layout>
+  );
+};
+
+// ==========================================
+// GUARDIÃO DE ROTAS (PROTEGE O MAINCONTENT)
+// ==========================================
+const AuthGuard = ({ children }: { children: React.ReactNode }) => {
+  const { session, loading: authLoading } = useApp();
 
   if (authLoading) {
     return (
@@ -116,199 +334,47 @@ const App: React.FC = () => {
     );
   }
 
+  // Se expirar ou perder, quebra a rota e te manda pro login com 'replace'
   if (!session) {
-    return (
-      <React.Suspense fallback={null}>
-        <Login onLogin={() => { }} />
-      </React.Suspense>
-    );
+    return <Navigate to="/login" replace />;
   }
 
-  const userRole = profile?.role || 'user';
+  return <>{children}</>;
+};
+
+// ==========================================
+// APLICATIVO RAIZ (APENAS UM SWITCH DE ROTAS)
+// ==========================================
+const App: React.FC = () => {
+  const navigate = useNavigate();
+  const { session } = useApp();
+
+  // Permite auto-redirect se estiver na página de login, mas tiver sessão válida
+  useEffect(() => {
+    if (session && window.location.pathname === '/login') {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [session, navigate]);
 
   return (
     <>
       <Toaster position="top-right" />
-      <Router>
-        <React.Suspense fallback={
-          <div className="h-full w-full flex items-center justify-center">
-            <span className="animate-spin material-symbols-outlined text-3xl text-primary/20">progress_activity</span>
-          </div>
-        }>
-          <Layout
-            onLogout={logout}
-            isDarkMode={isDarkMode}
-            toggleDarkMode={toggleDarkMode}
-            userProfile={profile}
-            onAddReservation={() => setIsReservationModalOpen(true)}
-            onViewProfile={() => setIsProfileModalOpen(true)}
-          >
-            {/* Botão de Sincronização Manual Flutuante */}
-            <button 
-              onClick={() => fetchData(true)}
-              className="fixed bottom-6 right-6 z-50 size-12 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
-              title="Sincronizar agora"
-            >
-              <span className="material-symbols-outlined group-hover:rotate-180 transition-transform duration-500">sync</span>
-            </button>
-
-            <ErrorBoundary>
-              <Routes>
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={
-                  <Dashboard
-                    isLoading={isLoading}
-                    stats={{
-                      available: vehicles.filter(v => v.status === 'Disponível').length,
-                      rented: vehicles.filter(v => v.status === 'Alugado').length,
-                      total: vehicles.filter(v => v.status !== 'Desativado').length,
-                      maintenance: vehicles.filter(v => v.status === 'Em manutenção').length
-                    }}
-                    recentReservations={reservations.slice(0, 4)}
-                  />
-                } />
-                <Route path="/clients" element={
-                  <ClientsView
-                    clients={clients}
-                    isLoading={isLoading}
-                    onAddClient={async (c) => {
-                      const { data, error } = await supabase.from('clients').insert([c]).select();
-                      if (error) throw error;
-                      if (data && data[0]) setClients(prev => [data[0], ...prev]);
-                    }}
-                    onUpdateClient={async (id, c) => {
-                      const { data, error } = await supabase.from('clients').update(c).eq('id', id).select();
-                      if (error) throw error;
-                      if (data && data[0]) setClients(prev => prev.map(item => item.id === id ? data[0] : item));
-                    }}
-                    onDeleteClient={async (id) => {
-                      const { error } = await supabase.from('clients').delete().eq('id', id);
-                      if (error) throw error;
-                      setClients(prev => prev.filter(item => item.id !== id));
-                    }}
-                  />
-                } />
-                <Route path="/vehicles" element={
-                  <VehiclesView
-                    vehicles={vehicles}
-                    isLoading={isLoading}
-                    onAddVehicle={async (v) => {
-                      const { data, error } = await supabase.from('vehicles').insert([v]).select();
-                      if (error) throw error;
-                      if (data && data[0]) setVehicles(prev => [data[0], ...prev]);
-                    }}
-                    onUpdateVehicle={async (id, v) => {
-                      const { data, error } = await supabase.from('vehicles').update(v).eq('id', id).select();
-                      if (error) throw error;
-                      if (data && data[0]) setVehicles(prev => prev.map(item => item.id === id ? data[0] : item));
-                    }}
-                    onDeleteVehicle={async (id) => {
-                      const { error } = await supabase.from('vehicles').delete().eq('id', id);
-                      if (error) throw error;
-                      setVehicles(prev => prev.filter(item => item.id !== id));
-                    }}
-                  />
-                } />
-                <Route path="/reservations" element={
-                  <ReservationsView
-                    reservations={reservations}
-                    isLoading={isLoading}
-                    onEmitVoucher={setSelectedVoucherRes}
-                    onUpdateReservation={async (id, updates) => {
-                      const { data, error } = await supabase
-                        .from('reservations')
-                        .update(updates)
-                        .eq('id', id)
-                        .select('*');
-                      if (error) throw error;
-                      if (data && data[0]) {
-                        const client = clients.find(c => c.id === data[0].client_id);
-                        const vehicle = vehicles.find(v => v.id === data[0].vehicle_id);
-                        const transformed = {
-                          ...data[0],
-                          clientName: client?.name || 'N/A',
-                          vehicleModel: vehicle?.model || 'N/A',
-                          vehiclePlate: vehicle?.plate || '---',
-                          dateStr: new Date(data[0].created_at).toLocaleDateString('pt-BR')
-                        };
-                        setReservations(prev => prev.map(item => item.id === id ? transformed : item));
-                      }
-                    }}
-                    onAddReservation={async (r) => {
-                      const { data, error } = await supabase
-                        .from('reservations')
-                        .insert([r])
-                        .select('*');
-                      if (error) throw error;
-                      if (data && data[0]) {
-                        const client = clients.find(c => c.id === data[0].client_id);
-                        const vehicle = vehicles.find(v => v.id === data[0].vehicle_id);
-                        const transformed = {
-                          ...data[0],
-                          clientName: client?.name || 'N/A',
-                          vehicleModel: vehicle?.model || 'N/A',
-                          vehiclePlate: vehicle?.plate || 'N/A',
-                          dateStr: new Date(data[0].created_at).toLocaleDateString('pt-BR')
-                        };
-                        setReservations(prev => [transformed, ...prev]);
-                      }
-                    }}
-                    onDeleteReservation={async (id) => {
-                      const { error } = await supabase.from('reservations').delete().eq('id', id);
-                      if (error) throw error;
-                      setReservations(prev => prev.filter(item => item.id !== id));
-                    }}
-                  />
-                } />
-                <Route path="/users" element={userRole === 'admin' ? <UsersView /> : <Navigate to="/dashboard" replace />} />
-                <Route path="*" element={<Navigate to="/dashboard" replace />} />
-              </Routes>
-            </ErrorBoundary>
-
-            {selectedVoucherRes && (
-              <VoucherModal
-                reservation={selectedVoucherRes}
-                client={clients.find(c => c.id === selectedVoucherRes.client_id)}
-                vehicle={vehicles.find(v => v.id === selectedVoucherRes.vehicle_id)}
-                onClose={() => setSelectedVoucherRes(null)}
-              />
-            )}
-
-            {isReservationModalOpen && (
-              <ReservationModal
-                clients={clients}
-                vehicles={vehicles}
-                onClose={() => setIsReservationModalOpen(false)}
-                onSave={async (r) => {
-                  const { data, error } = await supabase
-                    .from('reservations')
-                    .insert([r])
-                    .select('*');
-                  if (error) throw error;
-                  if (data && data[0]) {
-                    const client = clients.find(c => c.id === data[0].client_id);
-                    const vehicle = vehicles.find(v => v.id === data[0].vehicle_id);
-                    const transformed = {
-                      ...data[0],
-                      clientName: client?.name || 'N/A',
-                      vehicleModel: vehicle?.model || 'N/A',
-                      vehiclePlate: vehicle?.plate || 'N/A',
-                      dateStr: new Date(data[0].created_at).toLocaleDateString('pt-BR')
-                    };
-                    setReservations(prev => [transformed, ...prev]);
-                    toast.success('Reserva confirmada!');
-                    setIsReservationModalOpen(false);
-                  }
-                }}
-              />
-            )}
-
-            {isProfileModalOpen && (
-              <ProfileModal userProfile={profile} onClose={() => setIsProfileModalOpen(false)} />
-            )}
-          </Layout>
-        </React.Suspense>
-      </Router>
+      <React.Suspense fallback={
+        <div className="h-full w-full flex items-center justify-center min-h-screen">
+          <span className="animate-spin material-symbols-outlined text-3xl text-primary/20">progress_activity</span>
+        </div>
+      }>
+        <Routes>
+          <Route path="/login" element={
+            <Login onLogin={() => navigate('/dashboard', { replace: true })} />
+          } />
+          <Route path="/*" element={
+            <AuthGuard>
+              <MainContent />
+            </AuthGuard>
+          } />
+        </Routes>
+      </React.Suspense>
     </>
   );
 };
