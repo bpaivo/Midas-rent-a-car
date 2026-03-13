@@ -10,6 +10,7 @@ export interface AppContextType {
     loading: boolean;
     toggleDarkMode: () => void;
     logout: () => Promise<void>;
+    repairSession: () => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -20,33 +21,53 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [loading, setLoading] = useState(true);
 
+    const repairSession = async () => {
+        console.log('[AuthContext] Iniciando reparo de sessão...');
+        try {
+            // 1. Tenta dar um refresh no token sem deslogar
+            const { data, error } = await supabase.auth.refreshSession();
+            if (error) throw error;
+            
+            if (data.session) {
+                setSession(data.session);
+                // 2. Limpa caches do navegador que não sejam a própria sessão
+                Object.keys(localStorage).forEach(key => {
+                    if (!key.includes('midas-auth-token') && !key.includes('supabase.auth')) {
+                        localStorage.removeItem(key);
+                    }
+                });
+                toast.success('Conexão reparada com sucesso!');
+                return;
+            }
+        } catch (err) {
+            console.error('[AuthContext] Erro ao reparar sessão:', err);
+        }
+    };
+
     useEffect(() => {
         let mounted = true;
 
         const initializeAuth = async () => {
-            // Timeout de segurança: se em 6 segundos não validar, libera a tela
-            // para evitar que o usuário fique preso no 'Validando acesso...'
             const safetyTimeout = setTimeout(() => {
                 if (mounted && loading) {
-                    console.warn('[AuthContext] Timeout de segurança atingido na inicialização.');
+                    console.warn('[AuthContext] Timeout de segurança atingido.');
                     setLoading(false);
                 }
-            }, 6000);
+            }, 8000);
 
             try {
-                // 1. Recupera a sessão de forma ultra rápida
+                // Tenta recuperar a sessão e já dar um refresh para garantir que o token é novo
                 const { data: { session: initialSession }, error } = await supabase.auth.getSession();
                 
                 if (error) throw error;
 
                 if (mounted) {
                     setSession(initialSession);
-                    // LIBERA A TELA IMEDIATAMENTE se houver sessão ou se não houver
                     setLoading(false); 
                     clearTimeout(safetyTimeout);
 
-                    // 2. Busca o perfil em segundo plano (não trava a tela)
                     if (initialSession) {
+                        // Busca perfil
                         supabase
                             .from('profiles')
                             .select('*')
@@ -70,7 +91,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
             if (!mounted) return;
-
             setSession(currentSession);
             
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
@@ -123,7 +143,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             isDarkMode,
             loading,
             toggleDarkMode,
-            logout
+            logout,
+            repairSession
         }}>
             {children}
         </AppContext.Provider>

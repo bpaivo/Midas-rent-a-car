@@ -23,11 +23,11 @@ import VoucherModal from './components/VoucherModal';
 import ReservationModal from './components/ReservationModal';
 import ProfileModal from './components/ProfileModal';
 
-// Helper de Mutação Segura contra Travamentos do Supabase
+// Helper de Mutação Segura
 const createSafeMutation = async <T extends any>(promiseOrBuilder: PromiseLike<T>): Promise<T> => {
   let timeoutId: NodeJS.Timeout;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Conexão instável. O banco de dados não respondeu a tempo.')), 15000);
+    timeoutId = setTimeout(() => reject(new Error('O banco de dados não respondeu a tempo.')), 15000);
   });
   try {
     const result = await Promise.race([Promise.resolve(promiseOrBuilder), timeoutPromise]);
@@ -37,11 +37,8 @@ const createSafeMutation = async <T extends any>(promiseOrBuilder: PromiseLike<T
   }
 };
 
-// ==========================================
-// CAMADA PRINCIPAL DE DADOS (MONTA O ESTADO LIMPO A CADA LOGIN)
-// ==========================================
 const MainContent: React.FC = () => {
-  const { session, profile, isDarkMode, toggleDarkMode, logout } = useApp();
+  const { session, profile, isDarkMode, toggleDarkMode, logout, repairSession } = useApp();
   const [selectedVoucherRes, setSelectedVoucherRes] = useState<Reservation | null>(null);
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -54,65 +51,55 @@ const MainContent: React.FC = () => {
   
   const isFetching = useRef(false);
 
-  const fetchData = useCallback(async (options: { isManual?: boolean, silent?: boolean } = {}) => {
-    const { isManual = false, silent = false } = options;
+  const fetchData = useCallback(async (options: { isManual?: boolean, silent?: boolean, forceRepair?: boolean } = {}) => {
+    const { isManual = false, silent = false, forceRepair = false } = options;
     if (!session?.user?.id || isFetching.current) return;
     
-    isFetching.current = true;
-    const toastId = isManual ? toast.loading('Sincronizando dados...') : null;
-    
-    if (!silent) {
-      setIsLoading(true);
+    if (forceRepair) {
+      await repairSession();
     }
 
+    isFetching.current = true;
+    const toastId = isManual ? toast.loading(forceRepair ? 'Reparando conexão...' : 'Sincronizando dados...') : null;
+    
+    if (!silent) setIsLoading(true);
+
     try {
-      // Carregamento Incremental: Busca cada recurso de forma independente
-      // para que um erro em um não trave os outros.
-      
-      const fetchClients = async () => {
-        const { data, error } = await supabase.from('clients').select('*').order('name').limit(1000);
-        if (error) throw error;
-        setClients(data || []);
-        return data || [];
-      };
-
-      const fetchVehicles = async () => {
-        const { data, error } = await supabase.from('vehicles').select('*').order('model').limit(500);
-        if (error) throw error;
-        setVehicles(data || []);
-        return data || [];
-      };
-
-      const fetchReservations = async (currentClients: Client[], currentVehicles: Vehicle[]) => {
-        const { data, error } = await supabase.from('reservations').select('*').order('created_at', { ascending: false }).limit(500);
-        if (error) throw error;
-        
-        if (data) {
-          const transformed: Reservation[] = data.map((r: any) => {
-            const client = currentClients.find(c => c.id === r.client_id);
-            const vehicle = currentVehicles.find(v => v.id === r.vehicle_id);
-            return {
-              ...r,
-              clientName: client?.name || 'Cliente não encontrado',
-              vehicleModel: vehicle?.model || 'Veículo não encontrado',
-              vehiclePlate: vehicle?.plate || '---',
-              dateStr: new Date(r.created_at).toLocaleDateString('pt-BR')
-            };
-          });
-          setReservations(transformed);
-        }
-      };
-
-      // Executa as buscas. Se falhar, o erro será capturado no catch global.
-      const [loadedClients, loadedVehicles] = await Promise.all([
-        fetchClients(),
-        fetchVehicles()
+      // Busca Clientes e Veículos primeiro
+      const [clientsRes, vehiclesRes] = await Promise.all([
+        supabase.from('clients').select('*').order('name').limit(1000),
+        supabase.from('vehicles').select('*').order('model').limit(500)
       ]);
 
-      // Busca as reservas usando os dados de clientes e veículos já carregados
-      await fetchReservations(loadedClients, loadedVehicles);
+      if (clientsRes.error) throw clientsRes.error;
+      if (vehiclesRes.error) throw vehiclesRes.error;
 
-      if (isManual) toast.success('Dados atualizados!', { id: toastId });
+      const currentClients = clientsRes.data || [];
+      const currentVehicles = vehiclesRes.data || [];
+      
+      setClients(currentClients);
+      setVehicles(currentVehicles);
+
+      // Busca Reservas
+      const { data: resData, error: resError } = await supabase.from('reservations').select('*').order('created_at', { ascending: false }).limit(500);
+      if (resError) throw resError;
+
+      if (resData) {
+        const transformed: Reservation[] = resData.map((r: any) => {
+          const client = currentClients.find(c => c.id === r.client_id);
+          const vehicle = currentVehicles.find(v => v.id === r.vehicle_id);
+          return {
+            ...r,
+            clientName: client?.name || 'Cliente não encontrado',
+            vehicleModel: vehicle?.model || 'Veículo não encontrado',
+            vehiclePlate: vehicle?.plate || '---',
+            dateStr: new Date(r.created_at).toLocaleDateString('pt-BR')
+          };
+        });
+        setReservations(transformed);
+      }
+
+      if (isManual) toast.success(forceRepair ? 'Sistema reparado!' : 'Dados atualizados!', { id: toastId });
     } catch (error: any) {
       console.error('[App] Erro ao carregar dados:', error);
       
@@ -120,30 +107,17 @@ const MainContent: React.FC = () => {
         toast.error('Sua sessão expirou. Faça login novamente.');
         logout();
       } else {
-        toast.error(`Erro de conexão: ${error.message || 'Verifique sua internet'}`, { id: toastId || undefined });
+        toast.error(`Erro de conexão. Clique no botão de sincronizar no canto inferior.`, { id: toastId || undefined });
       }
     } finally {
       setIsLoading(false);
       isFetching.current = false;
     }
-  }, [session?.user?.id, logout]);
+  }, [session?.user?.id, logout, repairSession]);
 
-  // Busca inicial pura
   useEffect(() => {
-    isFetching.current = false;
     fetchData();
   }, [fetchData]);
-
-  // Auto-refresh ao voltar para a aba
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && session?.user?.id) {
-        fetchData({ silent: true });
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [session?.user?.id, fetchData]);
 
   const userRole = profile?.role || 'user';
 
@@ -156,10 +130,12 @@ const MainContent: React.FC = () => {
       onAddReservation={() => setIsReservationModalOpen(true)}
       onViewProfile={() => setIsProfileModalOpen(true)}
     >
+      {/* Botão de Sincronização Inteligente */}
       <button 
         onClick={() => fetchData({ isManual: true })}
+        onDoubleClick={() => fetchData({ isManual: true, forceRepair: true })}
         className="fixed bottom-6 right-6 z-50 size-12 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
-        title="Sincronizar agora"
+        title="Clique para sincronizar. Clique duplo para reparar conexão."
       >
         <span className="material-symbols-outlined group-hover:rotate-180 transition-transform duration-500">sync</span>
       </button>
@@ -322,9 +298,6 @@ const MainContent: React.FC = () => {
   );
 };
 
-// ==========================================
-// GUARDIÃO DE ROTAS (PROTEGE O MAINCONTENT)
-// ==========================================
 const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const { session, loading: authLoading } = useApp();
 
@@ -339,7 +312,6 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // Se expirar ou perder, quebra a rota e te manda pro login com 'replace'
   if (!session) {
     return <Navigate to="/login" replace />;
   }
@@ -347,14 +319,10 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// ==========================================
-// APLICATIVO RAIZ (APENAS UM SWITCH DE ROTAS)
-// ==========================================
 const App: React.FC = () => {
   const navigate = useNavigate();
   const { session } = useApp();
 
-  // Permite auto-redirect se estiver na página de login, mas tiver sessão válida
   useEffect(() => {
     if (session && window.location.pathname === '/login') {
       navigate('/dashboard', { replace: true });
