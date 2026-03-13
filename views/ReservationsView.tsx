@@ -4,6 +4,7 @@ import { TableSkeleton } from '../components/LoadingSkeleton';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import EditReservationModal from '../components/EditReservationModal';
+import ContractEditorView from './ContractEditorView';
 
 const defaultChecklistItems = ['Lataria', 'Motor', 'Pneus', 'Interior', 'Vidros', 'Acessórios'];
 
@@ -58,6 +59,7 @@ const ReservationsView: React.FC<ReservationsViewProps> = ({
   const [processingPickupRes, setProcessingPickupRes] = useState<Reservation | null>(null);
   const [processingReturnRes, setProcessingReturnRes] = useState<Reservation | null>(null);
   const [viewingReportRes, setViewingReportRes] = useState<Reservation | null>(null);
+  const [editingContractRes, setEditingContractRes] = useState<Reservation | null>(null);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -164,8 +166,11 @@ const ReservationsView: React.FC<ReservationsViewProps> = ({
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-2 relative">
+                        <button onClick={() => setEditingContractRes(res)} className="px-4 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-500 hover:text-white transition-all active:scale-95 border border-emerald-500/20">
+                          Contrato
+                        </button>
                         <button onClick={() => onEmitVoucher(res)} className="px-4 py-1.5 rounded-lg bg-primary/5 text-primary dark:text-accent-sunshine text-xs font-bold hover:bg-primary hover:text-white transition-all active:scale-95 border border-primary/20">
-                          Emitir Voucher
+                          Voucher
                         </button>
                         <div className="relative">
                           <button onClick={() => setActiveMenu(activeMenu === res.id ? null : res.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors">
@@ -216,6 +221,14 @@ const ReservationsView: React.FC<ReservationsViewProps> = ({
       {processingPickupRes && <PickupModal reservation={processingPickupRes} onClose={() => setProcessingPickupRes(null)} onUpdate={onUpdateReservation} />}
       {processingReturnRes && <ReturnModal reservation={processingReturnRes} onClose={() => setProcessingReturnRes(null)} onUpdate={onUpdateReservation} />}
       {viewingReportRes && <InspectionReportModal reservation={viewingReportRes} onClose={() => setViewingReportRes(null)} />}
+      {editingContractRes && (
+        <ContractEditorView 
+            reservation={editingContractRes} 
+            client={clients.find(c => c.id === editingContractRes.client_id)}
+            vehicle={vehicles.find(v => v.id === editingContractRes.vehicle_id)}
+            onClose={() => setEditingContractRes(null)} 
+        />
+      )}
     </div>
   );
 };
