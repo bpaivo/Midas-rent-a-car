@@ -186,7 +186,7 @@ const PublicLanding: React.FC = () => {
               A <span className="font-bold text-primary">Midas Rent a Car</span> nasceu com o propósito de transformar a mobilidade em Tianguá e em toda a Serra da Ibiapaba. Percebemos que para garantir a satisfação total dos nossos clientes, precisávamos oferecer mais que apenas carros: precisávamos oferecer confiança.
             </p>
             <p>
-              Iniciamos nossas operações focados na excelência do atendimento e na manutenção rigorosa de nossa frota. Nossa dedicação em proporcionar a melhor experiência de locação nos permitiu expandir rapidamente, tornando-nos referência no setor.
+              Iniciamos nossas operações focados na excelência do atendimento e na manutenção rigorosa de nossa frota. Nossa dedicação em proporcionar a melhor experiênca de locação nos permitiu expandir rapidamente, tornando-nos referência no setor.
             </p>
           </div>
           <div className="bg-slate-50 p-8 rounded-3xl border border-slate-100 space-y-6">
@@ -379,15 +379,26 @@ const PublicLanding: React.FC = () => {
               <img src="/Logo-verde.png" alt="Midas Logo" className="h-8 w-auto" />
               <p className="text-sm font-bold text-slate-400">© 2024 Midas Rent a Car. Todos os direitos reservados.</p>
             </div>
-            <a 
-              href="https://github.com/WillianDev99" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-slate-400 hover:text-primary transition-colors flex items-center gap-2 text-xs font-bold uppercase tracking-widest"
-            >
-              <Github size={18} />
-              <span>Desenvolvido por WillianDev99</span>
-            </a>
+            <div className="flex flex-wrap gap-4 sm:gap-8">
+              <a 
+                href="https://github.com/WillianDev99" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-slate-400 hover:text-primary transition-colors flex items-center gap-2 text-xs font-bold uppercase tracking-widest"
+              >
+                <Github size={18} />
+                <span>WillianDev99</span>
+              </a>
+              <a 
+                href="https://github.com/bpaivo" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-slate-400 hover:text-primary transition-colors flex items-center gap-2 text-xs font-bold uppercase tracking-widest"
+              >
+                <Github size={18} />
+                <span>bpaivo</span>
+              </a>
+            </div>
           </div>
           <div className="flex gap-8 text-xs font-black text-slate-400 uppercase tracking-widest">
             <a href="#" className="hover:text-primary transition-colors">Privacidade</a>
