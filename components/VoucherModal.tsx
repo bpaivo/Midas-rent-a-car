@@ -1,7 +1,12 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Reservation, Client, Vehicle } from '../types';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
+// @ts-ignore
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Configuração do worker do PDF.js via CDN para evitar problemas de build
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface VoucherModalProps {
   reservation: Reservation;
@@ -9,6 +14,71 @@ interface VoucherModalProps {
   vehicle: Vehicle | undefined;
   onClose: () => void;
 }
+
+const PdfToImage: React.FC<{ url: string }> = ({ url }) => {
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const renderPdf = async () => {
+      try {
+        setLoading(true);
+        const loadingTask = pdfjsLib.getDocument(url);
+        const pdf = await loadingTask.promise;
+        const page = await pdf.getPage(1);
+        
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        
+        const context = canvas.getContext('2d');
+        if (!context) return;
+
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({
+          canvasContext: context,
+          viewport: viewport
+        }).promise;
+
+        setImageSrc(canvas.toDataURL('image/png'));
+        setLoading(false);
+      } catch (err) {
+        console.error('Erro ao renderizar PDF para imagem:', err);
+        setLoading(false);
+      }
+    };
+
+    renderPdf();
+  }, [url]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2">
+        <span className="animate-spin material-symbols-outlined text-primary">progress_activity</span>
+        <p className="text-[10px] font-bold text-slate-400 uppercase">Processando Documento...</p>
+      </div>
+    );
+  }
+
+  if (!imageSrc) {
+    return (
+      <div className="text-center p-4">
+        <span className="material-symbols-outlined text-rose-500 text-3xl">error</span>
+        <p className="text-[10px] font-bold text-slate-500 uppercase mt-2">Erro ao carregar visualização</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <canvas ref={canvasRef} className="hidden" />
+      <img src={imageSrc} alt="PDF Preview" className="max-h-full max-w-full object-contain" />
+    </>
+  );
+};
 
 const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicle, onClose }) => {
 
@@ -75,39 +145,7 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
     const isPdf = url.toLowerCase().endsWith('.pdf');
     
     if (isPdf) {
-      return (
-        <div style={{ 
-          width: '100%', 
-          height: '100%', 
-          backgroundColor: '#f8fafc', 
-          border: '2px solid #e2e8f0', 
-          borderRadius: '12px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '20px'
-        }}>
-          <div style={{ 
-            width: '50px', 
-            height: '50px', 
-            backgroundColor: '#ef4444', 
-            borderRadius: '10px', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            marginBottom: '10px',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-          }}>
-            <span style={{ color: 'white', fontWeight: '900', fontSize: '16px' }}>PDF</span>
-          </div>
-          <div style={{ fontSize: '11px', fontWeight: '900', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Documento Digital</div>
-          <div style={{ fontSize: '9px', color: '#64748b', fontWeight: '700', marginTop: '4px' }}>{label}</div>
-          <div style={{ marginTop: '12px', padding: '4px 12px', backgroundColor: '#e2e8f0', borderRadius: '99px', fontSize: '8px', fontWeight: '900', color: '#475569', textTransform: 'uppercase' }}>
-            Anexo Verificado
-          </div>
-        </div>
-      );
+      return <PdfToImage url={url} />;
     }
     
     return <img src={url} crossOrigin="anonymous" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />;
