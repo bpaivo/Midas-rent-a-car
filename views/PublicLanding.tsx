@@ -35,7 +35,7 @@ const PublicLanding: React.FC = () => {
   const handleWhatsAppSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const message = `Olá! Gostaria de fazer um pré-cadastro para aluguel.%0A%0A*Nome:* ${formData.name}%0A*Telefone:* ${formData.phone}%0A*Veículo de interesse:* ${formData.vehicle}%0A*Data pretendida:* ${formData.date}`;
-    window.open(`https://wa.me/5588997893569?text=${message}`, '_blank');
+    window.open(`https://wa.me/5588994906873?text=${message}`, '_blank');
   };
 
   return (
@@ -69,7 +69,7 @@ const PublicLanding: React.FC = () => {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
             </span>
-            Liberdade em Movimento
+            DIRIJA SUA LIBERDADE
           </div>
           <h1 className="text-5xl md:text-7xl font-black text-primary leading-[1.1] tracking-tight">
             Midas <span className="text-accent-sunshine">Rent a Car</span>: Sua Viagem em Boas Mãos.
@@ -186,7 +186,7 @@ const PublicLanding: React.FC = () => {
               A <span className="font-bold text-primary">Midas Rent a Car</span> nasceu com o propósito de transformar a mobilidade em Tianguá e em toda a Serra da Ibiapaba. Percebemos que para garantir a satisfação total dos nossos clientes, precisávamos oferecer mais que apenas carros: precisávamos oferecer confiança.
             </p>
             <p>
-              Iniciamos nossas operações focados na excelência do atendimento e na manutenção rigorosa de nossa frota. Nossa dedicação em proporcionar a melhor experiênca de locação nos permitiu expandir rapidamente, tornando-nos referência no setor.
+              Iniciamos nossas operações focados na excelência do atendimento e na manutenção rigorosa de nossa frota. Nossa dedicação em proporcionar a melhor experiência de locação nos permitiu expandir rapidamente, tornando-nos referência no setor.
             </p>
           </div>
           <div className="bg-slate-50 p-8 rounded-3xl border border-slate-100 space-y-6">
@@ -316,7 +316,7 @@ const PublicLanding: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-xs font-black text-white/40 uppercase tracking-widest mb-1">Telefone</p>
-                  <p className="text-lg font-bold">(88) 9 9789-3569</p>
+                  <p className="text-lg font-bold">(88) 9 9490-6873</p>
                 </div>
               </div>
               <div className="flex items-start gap-6">
