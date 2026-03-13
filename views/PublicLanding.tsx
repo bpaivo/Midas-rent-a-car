@@ -165,8 +165,16 @@ const PublicLanding: React.FC = () => {
 
       {/* History Section */}
       <section id="sobre" className="py-24 px-6 max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
-        <div className="order-2 lg:order-1">
-          <img src="/src/assets/landing_team.png" alt="Equipe Midas" className="rounded-3xl shadow-2xl" />
+        <div className="order-2 lg:order-1 relative">
+          <div className="absolute -inset-4 bg-primary/5 rounded-3xl blur-xl"></div>
+          <video 
+            src="/src/assets/midas_video.mp4" 
+            className="relative rounded-3xl shadow-2xl w-full aspect-video object-cover border-4 border-white"
+            autoPlay 
+            muted 
+            loop 
+            playsInline
+          />
         </div>
         <div className="space-y-8 order-1 lg:order-2">
           <h2 className="text-4xl font-black text-primary uppercase tracking-tight">Nossa História</h2>
@@ -333,7 +341,29 @@ const PublicLanding: React.FC = () => {
                 <span className="material-symbols-outlined text-accent-sunshine">schedule</span>
                 Horário de Atendimento
               </h4>
-              <img src="/src/assets/landing_hours.png" alt="Horários" className="w-full rounded-xl" />
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-accent-sunshine">calendar_today</span>
+                    <span className="text-sm font-bold uppercase tracking-wider">Segunda a Sexta</span>
+                  </div>
+                  <span className="text-lg font-black text-accent-sunshine">08:00 - 18:00</span>
+                </div>
+                <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-accent-sunshine">event</span>
+                    <span className="text-sm font-bold uppercase tracking-wider">Sábado</span>
+                  </div>
+                  <span className="text-lg font-black text-accent-sunshine">08:00 - 13:00</span>
+                </div>
+                <div className="flex items-center justify-between p-4 bg-rose-500/10 rounded-2xl border border-rose-500/20">
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-rose-400">block</span>
+                    <span className="text-sm font-bold uppercase tracking-wider text-rose-400">Domingo</span>
+                  </div>
+                  <span className="text-sm font-black text-rose-400 uppercase tracking-widest">Fechado</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
