@@ -8,6 +8,7 @@ import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 import { useApp } from './hooks/useApp';
 import ErrorBoundary from './components/ErrorBoundary';
+import { retryAsync } from './utils/retry';
 
 // Lazy Views
 const Login = React.lazy(() => import('./views/Login'));
@@ -36,60 +37,49 @@ const MainContent: React.FC = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   
   const isFetching = useRef(false);
-  const fetchCount = useRef(0);
 
   const fetchData = useCallback(async (options: { isManual?: boolean, silent?: boolean, forceRepair?: boolean } = {}) => {
     const { isManual = false, silent = false, forceRepair = false } = options;
     
-    // Se não houver usuário ou já estiver buscando, ignora
     if (!session?.user?.id || isFetching.current) return;
     
     isFetching.current = true;
-    fetchCount.current += 1;
-    
     if (!silent) setIsLoading(true);
     const toastId = isManual ? toast.loading(forceRepair ? 'Reparando sistema...' : 'Sincronizando...') : null;
 
-    // Timeout de segurança para o carregamento (12 segundos)
-    const fetchTimeout = setTimeout(() => {
-      if (isFetching.current) {
-        console.warn('[App] Fetch timeout atingido. Resetando estado.');
-        setIsLoading(false);
-        isFetching.current = false;
-        if (isManual) toast.error('A conexão está lenta. Tente novamente.', { id: toastId || undefined });
-      }
-    }, 12000);
-
     try {
-      // 1. Validação de Integridade (Verifica se o Supabase responde)
-      const { error: authError } = await supabase.auth.getUser();
-      if (authError) {
-        console.error('[App] Sessão inválida detectada:', authError);
+      // Se for reparo forçado, limpa caches antes
+      if (forceRepair) {
         await repairSession();
       }
 
-      // 2. Busca de dados em paralelo
-      const [clientsRes, vehiclesRes, reservationsRes] = await Promise.all([
-        supabase.from('clients').select('*').order('name'),
-        supabase.from('vehicles').select('*').order('model'),
-        supabase.from('reservations').select('*').order('created_at', { ascending: false })
+      // Busca de dados com Retry e Timeout individual
+      const fetchWithRetry = async (table: string) => {
+        return await retryAsync(async () => {
+          const { data, error } = await supabase.from(table).select('*').limit(1000);
+          if (error) throw error;
+          return data;
+        }, 2, 500);
+      };
+
+      // Executa buscas em paralelo mas trata erros individualmente para não travar tudo
+      const [clientsData, vehiclesData, reservationsData] = await Promise.allSettled([
+        fetchWithRetry('clients'),
+        fetchWithRetry('vehicles'),
+        fetchWithRetry('reservations')
       ]);
 
-      if (clientsRes.error) throw clientsRes.error;
-      if (vehiclesRes.error) throw vehiclesRes.error;
-      if (reservationsRes.error) throw reservationsRes.error;
+      const currentClients = clientsData.status === 'fulfilled' ? (clientsData.value || []) : clients;
+      const currentVehicles = vehiclesData.status === 'fulfilled' ? (vehiclesData.value || []) : vehicles;
+      const currentReservations = reservationsData.status === 'fulfilled' ? (reservationsData.value || []) : [];
 
-      const currentClients = clientsRes.data || [];
-      const currentVehicles = vehiclesRes.data || [];
-      const currentReservations = reservationsRes.data || [];
+      setClients(currentClients as Client[]);
+      setVehicles(currentVehicles as Vehicle[]);
 
-      setClients(currentClients);
-      setVehicles(currentVehicles);
-
-      // 3. Transformação de dados
-      const transformed: Reservation[] = currentReservations.map((r: any) => {
-        const client = currentClients.find(c => c.id === r.client_id);
-        const vehicle = currentVehicles.find(v => v.id === r.vehicle_id);
+      // Transformação de dados
+      const transformed: Reservation[] = (currentReservations as any[]).map((r: any) => {
+        const client = (currentClients as Client[]).find(c => c.id === r.client_id);
+        const vehicle = (currentVehicles as Vehicle[]).find(v => v.id === r.vehicle_id);
         return {
           ...r,
           clientName: client?.name || 'N/A',
@@ -101,25 +91,23 @@ const MainContent: React.FC = () => {
       
       setReservations(transformed);
       
-      if (isManual) toast.success('Dados sincronizados!', { id: toastId });
+      if (isManual) {
+        if (clientsData.status === 'rejected' || vehiclesData.status === 'rejected' || reservationsData.status === 'rejected') {
+          toast.error('Alguns dados não puderam ser carregados. Tente novamente.', { id: toastId || undefined });
+        } else {
+          toast.success('Dados sincronizados!', { id: toastId || undefined });
+        }
+      }
 
     } catch (error: any) {
-      console.error('[App] Erro crítico no carregamento:', error);
-      
-      // Se falhar 3 vezes seguidas, sugere logout
-      if (fetchCount.current >= 3 && !silent) {
-        toast.error('Múltiplas falhas de conexão. Tente sair e entrar novamente.');
-      } else {
-        toast.error('Erro ao carregar dados. Verifique sua conexão.', { id: toastId || undefined });
-      }
+      console.error('[App] Erro no carregamento:', error);
+      if (isManual) toast.error('Erro ao carregar dados. Verifique sua conexão.', { id: toastId || undefined });
     } finally {
-      clearTimeout(fetchTimeout);
       setIsLoading(false);
       isFetching.current = false;
     }
-  }, [session?.user?.id, repairSession]);
+  }, [session?.user?.id, repairSession, clients, vehicles]);
 
-  // Efeito de carregamento inicial
   useEffect(() => {
     fetchData();
   }, [fetchData]);
