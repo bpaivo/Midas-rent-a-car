@@ -21,42 +21,47 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [loading, setLoading] = useState(true);
 
+    // Função de reparo técnico (pode ser chamada manualmente ou automática)
     const repairSession = async () => {
-        console.log('[AuthContext] Iniciando reparo de sessão...');
         try {
-            // 1. Tenta dar um refresh no token sem deslogar
+            // 1. Limpa caches do navegador que não sejam a própria sessão (evita dados corrompidos)
+            Object.keys(localStorage).forEach(key => {
+                if (!key.includes('midas-auth-token') && !key.includes('supabase.auth')) {
+                    localStorage.removeItem(key);
+                }
+            });
+
+            // 2. Tenta dar um refresh no token sem deslogar
             const { data, error } = await supabase.auth.refreshSession();
             if (error) throw error;
             
             if (data.session) {
                 setSession(data.session);
-                // 2. Limpa caches do navegador que não sejam a própria sessão
-                Object.keys(localStorage).forEach(key => {
-                    if (!key.includes('midas-auth-token') && !key.includes('supabase.auth')) {
-                        localStorage.removeItem(key);
-                    }
-                });
-                toast.success('Conexão reparada com sucesso!');
-                return;
+                return true;
             }
         } catch (err) {
             console.error('[AuthContext] Erro ao reparar sessão:', err);
         }
+        return false;
     };
 
     useEffect(() => {
         let mounted = true;
 
         const initializeAuth = async () => {
+            // Timeout de segurança agressivo: 5 segundos para validar acesso
             const safetyTimeout = setTimeout(() => {
                 if (mounted && loading) {
-                    console.warn('[AuthContext] Timeout de segurança atingido.');
+                    console.warn('[AuthContext] Timeout de segurança atingido. Liberando interface.');
                     setLoading(false);
                 }
-            }, 8000);
+            }, 5000);
 
             try {
-                // Tenta recuperar a sessão e já dar um refresh para garantir que o token é novo
+                // AUTOMATIZAÇÃO: Sempre tenta reparar/limpar cache no F5
+                await repairSession();
+
+                // Recupera a sessão atualizada
                 const { data: { session: initialSession }, error } = await supabase.auth.getSession();
                 
                 if (error) throw error;
@@ -67,7 +72,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     clearTimeout(safetyTimeout);
 
                     if (initialSession) {
-                        // Busca perfil
+                        // Busca perfil em segundo plano
                         supabase
                             .from('profiles')
                             .select('*')
