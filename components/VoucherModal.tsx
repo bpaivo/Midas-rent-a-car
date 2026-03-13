@@ -76,9 +76,10 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
       return (
         <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 border border-slate-200 rounded-xl p-4">
           <div className="flex flex-col items-center gap-2 text-center">
-            <div className="size-12 rounded-full bg-rose-100 flex items-center justify-center mb-1">
-              <span className="material-symbols-outlined text-rose-600 text-3xl">picture_as_pdf</span>
-            </div>
+            {/* SVG nativo para garantir renderização no PDF */}
+            <svg className="w-12 h-12 text-rose-500 mb-1" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3.5h-1.25v1.5h1.25V11H19v1.5h-1.5V7h3v1.5zM9 10h1V8.5H9V10zm5.5 1.5h1v-3h-1v3zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z"/>
+            </svg>
             <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Documento PDF</p>
             <p className="text-[8px] text-slate-400 font-bold truncate max-w-[180px]">{label}</p>
             <div className="mt-2 px-3 py-1 bg-slate-200 rounded-full text-[7px] font-black text-slate-500 uppercase tracking-tighter">
@@ -378,7 +379,10 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                   {reservation.insurance_details?.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-2 border-b border-emerald-50/50 pb-1">
-                      <span className="material-symbols-outlined text-emerald-600 text-[14px]">check_circle</span>
+                      {/* SVG nativo para o checkmark */}
+                      <svg className="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path>
+                      </svg>
                       <span className="text-[9px] font-bold text-slate-700 uppercase leading-tight">{item.name}</span>
                     </div>
                   ))}
