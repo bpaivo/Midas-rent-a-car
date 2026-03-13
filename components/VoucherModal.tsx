@@ -1,13 +1,9 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Reservation, Client, Vehicle } from '../types';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
-// @ts-ignore
-import * as pdfjsLib from 'pdfjs-dist';
-
-// Configuração do worker do PDF.js usando o padrão do Vite para máxima compatibilidade
-import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+import { PDFDocument } from 'pdf-lib';
+import toast from 'react-hot-toast';
 
 interface VoucherModalProps {
   reservation: Reservation;
@@ -16,94 +12,8 @@ interface VoucherModalProps {
   onClose: () => void;
 }
 
-const PdfToImage: React.FC<{ url: string }> = ({ url }) => {
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const renderPdf = async () => {
-      try {
-        setLoading(true);
-        setError(false);
-        
-        // Carrega o documento com suporte a CORS
-        const loadingTask = pdfjsLib.getDocument({
-          url: url,
-          withCredentials: false
-        });
-        
-        const pdf = await loadingTask.promise;
-        const page = await pdf.getPage(1);
-        
-        const viewport = page.getViewport({ scale: 2.0 });
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        
-        const context = canvas.getContext('2d');
-        if (!context) return;
-
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-
-        await page.render({
-          canvasContext: context,
-          viewport: viewport
-        }).promise;
-
-        setImageSrc(canvas.toDataURL('image/png'));
-        setLoading(false);
-      } catch (err) {
-        console.error('Erro ao renderizar PDF:', err);
-        setError(true);
-        setLoading(false);
-      }
-    };
-
-    renderPdf();
-  }, [url]);
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 p-8">
-        <div className="size-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Processando PDF...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
-        <div className="size-12 bg-rose-50 rounded-full flex items-center justify-center">
-          <span className="material-symbols-outlined text-rose-500">picture_as_pdf</span>
-        </div>
-        <div>
-          <p className="text-[10px] font-black text-slate-600 uppercase">Documento PDF</p>
-          <a 
-            href={url} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="mt-2 inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-white rounded-lg text-[9px] font-bold uppercase hover:brightness-110 transition-all"
-          >
-            <span className="material-symbols-outlined text-xs">open_in_new</span>
-            Visualizar Original
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="w-full h-full flex items-center justify-center bg-white">
-      <canvas ref={canvasRef} className="hidden" />
-      <img src={imageSrc!} alt="PDF Preview" className="max-h-full max-w-full object-contain shadow-sm" />
-    </div>
-  );
-};
-
 const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicle, onClose }) => {
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -140,25 +50,64 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
     const element = document.getElementById('voucher-content');
     if (!element) return;
 
-    const opt = {
-      margin: 0,
-      filename: `Voucher-${voucherRef}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        letterRendering: true,
-        scrollY: 0,
-        windowWidth: 1200
-      },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-    };
+    setIsGenerating(true);
+    const loadingToast = toast.loading('Gerando voucher completo...');
 
     try {
-      await html2pdf().set(opt).from(element).save();
+      // 1. Gerar o PDF do Voucher (HTML para PDF)
+      const opt = {
+        margin: 0,
+        filename: `temp_voucher.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      // Obter o PDF do voucher como ArrayBuffer
+      const voucherPdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
+      const voucherPdfBytes = await voucherPdfBlob.arrayBuffer();
+
+      // 2. Criar o documento final mesclado
+      const mergedPdf = await PDFDocument.create();
+      const voucherDoc = await PDFDocument.load(voucherPdfBytes);
+      const copiedPages = await mergedPdf.copyPages(voucherDoc, voucherDoc.getPageIndices());
+      copiedPages.forEach((page) => mergedPdf.addPage(page));
+
+      // 3. Buscar e anexar documentos adicionais (apenas se forem PDF)
+      const docsToAttach = [
+        { url: client?.cnh_url, name: 'CNH' },
+        { url: client?.address_proof_url, name: 'Comprovante' },
+        { url: client?.selfie_url, name: 'Selfie' }
+      ];
+
+      for (const doc of docsToAttach) {
+        if (doc.url && doc.url.toLowerCase().endsWith('.pdf')) {
+          try {
+            const response = await fetch(doc.url);
+            const pdfBytes = await response.arrayBuffer();
+            const externalDoc = await PDFDocument.load(pdfBytes);
+            const externalPages = await mergedPdf.copyPages(externalDoc, externalDoc.getPageIndices());
+            externalPages.forEach((page) => mergedPdf.addPage(page));
+          } catch (err) {
+            console.warn(`Não foi possível anexar o documento ${doc.name}:`, err);
+          }
+        }
+      }
+
+      // 4. Salvar e baixar o arquivo final
+      const mergedPdfBytes = await mergedPdf.save();
+      const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `Voucher-Completo-${voucherRef}.pdf`;
+      link.click();
+
+      toast.success('Voucher gerado com anexos!', { id: loadingToast });
     } catch (err) {
-      console.error('Erro ao gerar PDF:', err);
+      console.error('Erro ao gerar PDF mesclado:', err);
+      toast.error('Erro ao gerar PDF completo.', { id: loadingToast });
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -168,7 +117,26 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
     const isPdf = url.toLowerCase().endsWith('.pdf');
     
     if (isPdf) {
-      return <PdfToImage url={url} />;
+      return (
+        <div className="flex flex-col items-center justify-center gap-4 p-6 bg-slate-50 dark:bg-slate-800 rounded-2xl border-2 border-slate-200 dark:border-slate-700 w-full h-full">
+          <div className="size-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center shadow-sm">
+            <span className="material-symbols-outlined text-4xl">picture_as_pdf</span>
+          </div>
+          <div className="text-center">
+            <p className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest">Documento PDF</p>
+            <p className="text-[10px] text-slate-500 font-bold mt-1">Será anexado ao final do arquivo gerado</p>
+          </div>
+          <a 
+            href={url} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="px-4 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase hover:bg-slate-50 transition-all flex items-center gap-2"
+          >
+            <span className="material-symbols-outlined text-sm">open_in_new</span>
+            Abrir Original
+          </a>
+        </div>
+      );
     }
     
     return <img src={url} crossOrigin="anonymous" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />;
@@ -187,9 +155,17 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
             <span className="font-bold text-sm uppercase tracking-wider">Voucher de Reserva</span>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={handleDownloadPDF} className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg font-bold text-sm hover:bg-slate-800 transition-all shadow-lg">
-              <span className="material-symbols-outlined text-lg">download</span>
-              PDF
+            <button 
+              onClick={handleDownloadPDF} 
+              disabled={isGenerating}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg font-bold text-sm hover:bg-slate-800 transition-all shadow-lg disabled:opacity-50"
+            >
+              {isGenerating ? (
+                <span className="animate-spin material-symbols-outlined text-lg">progress_activity</span>
+              ) : (
+                <span className="material-symbols-outlined text-lg">download</span>
+              )}
+              PDF Completo
             </button>
             <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg font-bold text-sm hover:brightness-110 transition-all shadow-lg shadow-primary/20">
               <span className="material-symbols-outlined text-lg">print</span>
