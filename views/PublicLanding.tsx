@@ -195,7 +195,7 @@ const PublicLanding: React.FC = () => {
             </h4>
             <ul className="space-y-4">
               {[
-                'Frota diversificada para todos os profiles.',
+                'Frota diversificada para todos os perfis.',
                 'Cobertura completa em Tianguá e região.',
                 'Atendimento personalizado e humanizado.',
                 'Foco em pontualidade e segurança do veículo.'
@@ -384,18 +384,6 @@ const PublicLanding: React.FC = () => {
           </div>
         </div>
       </footer>
-
-      {/* Floating WhatsApp Button */}
-      <a 
-        href="https://wa.me/5588997893569" 
-        target="_blank"
-        className="fixed bottom-8 left-8 z-50 size-16 bg-emerald-500 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
-      >
-        <span className="material-symbols-outlined text-4xl">chat</span>
-        <span className="absolute right-full mr-4 px-4 py-2 bg-white text-slate-900 rounded-xl text-xs font-black uppercase tracking-widest shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap border border-slate-100">
-          Fale Conosco
-        </span>
-      </a>
     </div>
   );
 };
