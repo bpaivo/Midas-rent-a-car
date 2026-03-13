@@ -74,16 +74,17 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
     
     if (isPdf) {
       return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 relative group">
-          <iframe 
-            src={`${url}#toolbar=0&navpanes=0&scrollbar=0`} 
-            className="w-full h-full border-none pointer-events-none"
-            title={`Preview ${label}`}
-          />
-          <div className="absolute inset-0 flex items-center justify-center bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity">
-             <span className="bg-white px-3 py-1 rounded-full text-[10px] font-black text-primary shadow-sm">PDF</span>
+        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 border border-slate-200 rounded-xl p-4">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <div className="size-12 rounded-full bg-rose-100 flex items-center justify-center mb-1">
+              <span className="material-symbols-outlined text-rose-600 text-3xl">picture_as_pdf</span>
+            </div>
+            <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Documento PDF</p>
+            <p className="text-[8px] text-slate-400 font-bold truncate max-w-[180px]">{label}</p>
+            <div className="mt-2 px-3 py-1 bg-slate-200 rounded-full text-[7px] font-black text-slate-500 uppercase tracking-tighter">
+              Anexo Digital
+            </div>
           </div>
-          <div className="absolute bottom-2 right-2 bg-primary text-white px-2 py-0.5 rounded text-[8px] font-black uppercase">PDF</div>
         </div>
       );
     }
