@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { UserProfile } from '../types';
 import toast from 'react-hot-toast';
 
-interface AppContextType {
+export interface AppContextType {
     session: any;
     profile: UserProfile | null;
     isDarkMode: boolean;
@@ -25,17 +25,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const initializeAuth = async () => {
             try {
-                // 1. Recupera a sessão 
-
-                const sessionPromise = supabase.auth.getSession();
-                
-                let timeoutId: NodeJS.Timeout;
-                const timeoutPromise = new Promise((_, reject) => {
-                    timeoutId = setTimeout(() => reject(new Error('Auth Timeout')), 4000);
-                });
-                
-                const { data: { session: initialSession }, error } = await Promise.race([sessionPromise, timeoutPromise]) as any;
-                clearTimeout(timeoutId!);
+                // 1. Recupera a sessão de forma ultra rápida
+                const { data: { session: initialSession }, error } = await supabase.auth.getSession();
                 
                 if (error) throw error;
 
@@ -56,18 +47,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             });
                     }
                 }
-            } catch (err: any) {
+            } catch (err) {
                 console.error('[AuthContext] Erro na inicialização:', err);
-                
-                if (err.message !== 'Auth Timeout') {
-                    await supabase.auth.signOut().catch(console.error);
-                }
-                
-                if (mounted) {
-                    setSession(null);
-                    setProfile(null);
-                    setLoading(false);
-                }
+                if (mounted) setLoading(false);
             }
         };
 

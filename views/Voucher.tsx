@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Reservation } from '../types';
 
@@ -106,14 +105,14 @@ const Voucher: React.FC<VoucherProps> = ({ reservation, onBack }) => {
                   <p className="text-[10px] font-bold uppercase text-slate-400 mb-2">Data e Hora de Retirada (Check-in)</p>
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-slate-400">login</span>
-                    <p className="text-lg font-bold text-primary">{reservation.pickupDate}</p>
+                    <p className="text-lg font-bold text-primary">{reservation.pickup_date}</p>
                   </div>
                 </div>
                 <div className="flex flex-col p-4 border border-slate-200 rounded-lg text-left">
                   <p className="text-[10px] font-bold uppercase text-slate-400 mb-2">Data e Hora de Devolução (Check-out)</p>
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-slate-400">logout</span>
-                    <p className="text-lg font-bold text-primary">{reservation.returnDate}</p>
+                    <p className="text-lg font-bold text-primary">{reservation.return_date}</p>
                   </div>
                 </div>
               </div>

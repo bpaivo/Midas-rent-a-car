@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Reservation, Client, Vehicle } from '../types';
-import html2pdf from 'https://esm.sh/html2pdf.js';
+// @ts-ignore
+import html2pdf from 'html2pdf.js';
 
 interface VoucherModalProps {
   reservation: Reservation;
