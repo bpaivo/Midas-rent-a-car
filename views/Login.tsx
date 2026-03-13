@@ -1,5 +1,5 @@
-
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 interface LoginProps {
@@ -7,6 +7,7 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,7 +34,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="bg-background-light dark:bg-background-dark min-h-screen flex items-center justify-center p-4 transition-colors">
+    <div className="bg-background-light dark:bg-background-dark min-h-screen flex items-center justify-center p-4 transition-colors relative">
+      {/* Botão Voltar */}
+      <button 
+        onClick={() => navigate('/')}
+        className="absolute top-8 left-8 flex items-center gap-2 text-primary/60 dark:text-white/60 hover:text-primary dark:hover:text-white font-bold text-sm transition-colors group"
+      >
+        <span className="material-symbols-outlined group-hover:-translate-x-1 transition-transform">arrow_back</span>
+        Voltar para o Site
+      </button>
+
       <div className="w-full max-w-[480px] flex flex-col items-center">
         <div className="mb-8 flex flex-col items-center gap-2">
           <div className="w-16 h-16 bg-primary rounded-xl flex items-center justify-center shadow-lg mb-2">

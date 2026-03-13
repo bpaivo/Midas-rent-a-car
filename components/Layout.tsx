@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { UserRole, UserProfile } from '../types';
@@ -33,13 +32,17 @@ const Layout: React.FC<LayoutProps> = ({ children, onLogout, isDarkMode, toggleD
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
       <aside className="w-64 flex-shrink-0 bg-primary dark:bg-[#002022] flex flex-col h-full border-r border-primary/10 transition-colors">
-        <div className="p-6 flex items-center justify-start border-b border-white/5 bg-white/5">
+        <button 
+          onClick={() => navigate('/')}
+          className="p-6 flex items-center justify-start border-b border-white/5 bg-white/5 hover:bg-white/10 transition-colors group"
+          title="Voltar para o Site"
+        >
           <img
             src="/Logo-verde.png"
             alt="Midas Rent a Car"
-            className="h-10 w-auto object-contain"
+            className="h-10 w-auto object-contain group-hover:scale-105 transition-transform"
           />
-        </div>
+        </button>
 
         <nav className="flex-1 px-4 mt-6 space-y-1">
           {visibleMenuItems.map((item) => (
