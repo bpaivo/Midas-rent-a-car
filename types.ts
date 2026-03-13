@@ -11,6 +11,12 @@ export type VehicleChecklist = Record<string, {
   observation: string;
 }>;
 
+export interface InsuranceItem {
+  name: string;
+  value: number;
+  selected: boolean;
+}
+
 export interface Client {
   id: string;
   name: string;
@@ -71,6 +77,7 @@ export interface Reservation {
   total_value: number;
   security_deposit: number;
   insurance_value: number;
+  insurance_details?: InsuranceItem[];
   additional_services: string;
   observations?: string;
   pickup_photos?: string[];

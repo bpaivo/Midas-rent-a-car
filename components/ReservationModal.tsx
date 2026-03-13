@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Client, Vehicle, Reservation, ReservationStatus } from '../types';
+import { Client, Vehicle, Reservation, ReservationStatus, InsuranceItem } from '../types';
 import { reservationSchema } from '../schemas/reservation.schema';
 import toast from 'react-hot-toast';
 import Calendar from './Calendar';
@@ -31,6 +31,28 @@ const ADDITIONAL_SERVICES = [
     { id: 'locatario_jovem', name: 'Locatário Jovem', price: 29.79, type: 'daily' },
 ];
 
+const INSURANCE_COVERAGES = [
+    "INCÊNDIO PROVENIENTE DE COLISÃO",
+    "FENÔMENOS DA NATUREZA",
+    "PROTEÇÃO VIDRO/FAROL/LANTERNA/RETROVISOR",
+    "ASSISTÊNCIA FUNERAL INDIVIDUAL PARA O ASSOCIADO - VALOR LIMITADO A R$ 5.000,00",
+    "PAP - ACIDENTE PESSOAL POR PASSAGEIRO - R$ 10.000,00 (ATÉ 5 PASSAGEIROS)",
+    "REBOQUE - 1000 KM - PANE",
+    "COLISÃO INTEGRAL",
+    "CARRO RESERVA EM CASO DE EVENTO (SINISTRO) - 15 DIAS",
+    "ASSISTÊNCIA 24H - VEÍCULO LEVE - PLENO - 01/2024 KM ILIMITADO COLISÃO",
+    "REBOQUE - 200 KM PANE SECA",
+    "MEIO DE TRANSPORTE ALTERNATIVO",
+    "TROCA DE PNEU",
+    "RETORNO A DOMICILIO",
+    "CHAVEIRO",
+    "HOSPEDAGEM EMERGENCIAL - DIÁRIA DE HOTEL EM CASO DE EMERGÊNCIA R$500,00",
+    "VALOR DE ATÉ R$ 70.000,00 PARA RESSARCIMENTO AOS PREJUÍZOS MATERIAIS CAUSADOS AO TERCEIRO.",
+    "COLISÃO PARCIAL",
+    "ROUBO E FURTO",
+    "CARGA DE BATERIA"
+];
+
 const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, onClose, onSave }) => {
     const [formData, setFormData] = useState({
         client_id: '',
@@ -45,6 +67,10 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
         status: ReservationStatus.AGUARDANDO
     });
     const [selectedServices, setSelectedServices] = useState<string[]>([]);
+    const [insuranceDetails, setInsuranceDetails] = useState<InsuranceItem[]>(
+        INSURANCE_COVERAGES.map(name => ({ name, value: 0, selected: false }))
+    );
+    const [defaultInsuranceItemValue, setDefaultInsuranceItemValue] = useState(0);
     const [isManualDiscount, setIsManualDiscount] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [occupiedRanges, setOccupiedRanges] = useState<{ start: Date; end: Date }[]>([]);
@@ -107,6 +133,34 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
         return () => { isAborted.aborted = true; };
     }, [formData.vehicle_id]);
 
+    // Atualiza o valor total do seguro quando os detalhes mudam
+    useEffect(() => {
+        const total = insuranceDetails
+            .filter(item => item.selected)
+            .reduce((sum, item) => sum + item.value, 0);
+        setFormData(prev => ({ ...prev, insurance_value: total }));
+    }, [insuranceDetails]);
+
+    const handleInsuranceToggle = (index: number) => {
+        setInsuranceDetails(prev => prev.map((item, i) => {
+            if (i === index) {
+                const newSelected = !item.selected;
+                return {
+                    ...item,
+                    selected: newSelected,
+                    value: newSelected ? defaultInsuranceItemValue : 0
+                };
+            }
+            return item;
+        }));
+    };
+
+    const handleInsuranceValueChange = (index: number, newValue: number) => {
+        setInsuranceDetails(prev => prev.map((item, i) => 
+            i === index ? { ...item, value: newValue } : item
+        ));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -123,14 +177,14 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
         const currentDailyRate = formData.base_rate * (1 - (formData.discount_percent / 100));
         const total_value = (currentDailyRate * days) + formData.insurance_value;
 
-        // Removemos base_rate e discount_percent pois não existem no banco de dados
         const { base_rate, discount_percent, ...cleanFormData } = formData;
 
         const dataToSave = {
             ...cleanFormData,
             daily_rate: currentDailyRate,
             days,
-            total_value
+            total_value,
+            insurance_details: insuranceDetails.filter(item => item.selected)
         };
 
         const validation = reservationSchema.safeParse(dataToSave);
@@ -204,7 +258,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto overflow-x-hidden">
+            <div className="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto overflow-x-hidden">
                 <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50 sticky top-0 z-20 backdrop-blur-md">
                     <div>
                         <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Nova Reserva</h2>
@@ -215,7 +269,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-8 space-y-6">
+                <form onSubmit={handleSubmit} className="p-8 space-y-8">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Veículo Disponível</label>
@@ -299,71 +353,76 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                                 onChange={e => setFormData({ ...formData, base_rate: Number(e.target.value) })}
                             />
                         </div>
+                    </div>
 
-                        <div className="col-span-1 md:col-span-2 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
-                            <div className="flex items-center justify-between">
-                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Tabela de Descontos Progressivos</label>
-                                <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">Descontos Automáticos</span>
+                    {/* Bloco de Informações do Seguro */}
+                    <div className="space-y-4 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div>
+                                <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Informações do Seguro</h3>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase">Selecione as coberturas desejadas</p>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                {DISCOUNT_TIERS.map((tier) => {
-                                    const isCurrent = currentTier?.label === tier.label;
-                                    const pricePerDay = formData.base_rate * (1 - (tier.discount / 100));
-
-                                    return (
-                                        <div
-                                            key={tier.label}
-                                            className={`p-2 rounded-xl border transition-all ${isCurrent
-                                                ? 'bg-primary border-primary shadow-lg shadow-primary/20'
-                                                : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700'
-                                                }`}
-                                        >
-                                            <div className={`text-[9px] font-black uppercase ${isCurrent ? 'text-white/70' : 'text-slate-400'}`}>
-                                                {tier.label}
-                                            </div>
-                                            <div className={`text-xs font-bold ${isCurrent ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
-                                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(pricePerDay)}
-                                            </div>
-                                            <div className={`text-[10px] font-bold ${isCurrent ? 'text-white' : 'text-emerald-500'}`}>
-                                                -{tier.discount}%
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                            <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor Padrão Item (R$)</label>
+                                <input 
+                                    type="number"
+                                    className="w-20 h-8 bg-slate-50 dark:bg-slate-900 border-none rounded-lg text-xs font-bold dark:text-white"
+                                    value={defaultInsuranceItemValue}
+                                    onChange={e => setDefaultInsuranceItemValue(Number(e.target.value))}
+                                />
                             </div>
                         </div>
 
-                        <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 space-y-1">
-                            <label className="text-[10px] font-black text-primary uppercase tracking-widest">Resumo da Seleção</label>
-                            <div className="text-sm font-bold text-slate-900 dark:text-white">
-                                {currentDays} {currentDays === 1 ? 'dia' : 'dias'} selecionados
-                            </div>
-                            <div className="flex items-center gap-2 mt-2">
-                                <div className="flex-1">
-                                    <label className="text-[9px] text-slate-400 font-bold uppercase block">Desconto (%)</label>
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="number"
-                                            className="w-16 h-8 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-2 text-xs font-bold dark:text-white"
-                                            value={formData.discount_percent}
-                                            onChange={e => {
-                                                setIsManualDiscount(true);
-                                                setFormData({ ...formData, discount_percent: Number(e.target.value) });
-                                            }}
+                        <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                            {insuranceDetails.map((item, index) => (
+                                <div 
+                                    key={item.name}
+                                    className={`flex items-center justify-between p-3 rounded-xl border transition-all ${item.selected 
+                                        ? 'bg-primary/5 border-primary/30 ring-1 ring-primary/30' 
+                                        : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:bg-slate-50'}`}
+                                >
+                                    <div className="flex items-center gap-3 flex-1">
+                                        <input 
+                                            type="checkbox"
+                                            className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                            checked={item.selected}
+                                            onChange={() => handleInsuranceToggle(index)}
                                         />
-                                        {!isManualDiscount && <span className="text-[9px] bg-emerald-500/10 text-emerald-600 px-1.5 py-0.5 rounded font-black uppercase">Auto</span>}
-                                        {isManualDiscount && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setIsManualDiscount(false)}
-                                                className="text-[9px] text-primary hover:underline font-bold uppercase"
-                                            >
-                                                Reset
-                                            </button>
-                                        )}
+                                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 leading-tight">{item.name}</span>
                                     </div>
+                                    {item.selected && (
+                                        <div className="flex items-center gap-2 ml-4">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase">R$</span>
+                                            <input 
+                                                type="number"
+                                                className="w-20 h-8 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-xs font-bold dark:text-white text-right"
+                                                value={item.value}
+                                                onChange={e => handleInsuranceValueChange(index, Number(e.target.value))}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
+                            ))}
+                        </div>
+
+                        <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Seguro</span>
+                            <span className="text-lg font-black text-primary dark:text-accent-sunshine">
+                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(formData.insurance_value)}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Caução (R$)</label>
+                            <input
+                                type="number"
+                                required
+                                className="w-full h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all dark:text-white"
+                                value={formData.security_deposit}
+                                onChange={e => setFormData({ ...formData, security_deposit: Number(e.target.value) })}
+                            />
                         </div>
 
                         <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10 space-y-1">
@@ -380,72 +439,6 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                                         Serviços inclusos: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(servicesTotal)}
                                     </span>
                                 )}
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Caução (R$)</label>
-                            <input
-                                type="number"
-                                required
-                                className="w-full h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all dark:text-white"
-                                value={formData.security_deposit}
-                                onChange={e => setFormData({ ...formData, security_deposit: Number(e.target.value) })}
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Valor do Seguro (Total R$)</label>
-                            <input
-                                type="number"
-                                className="w-full h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all dark:text-white"
-                                value={formData.insurance_value}
-                                onChange={e => setFormData({ ...formData, insurance_value: Number(e.target.value) })}
-                            />
-                        </div>
-
-                        <div className="col-span-1 md:col-span-2 space-y-3">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Serviços Adicionais</label>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {ADDITIONAL_SERVICES.map(service => (
-                                    <label
-                                        key={service.id}
-                                        className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${selectedServices.includes(service.id)
-                                            ? 'bg-primary/5 border-primary/30 ring-1 ring-primary/30'
-                                            : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:bg-slate-50'
-                                            }`}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <input
-                                                type="checkbox"
-                                                className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
-                                                checked={selectedServices.includes(service.id)}
-                                                onChange={(e) => {
-                                                    const newServices = e.target.checked
-                                                        ? [...selectedServices, service.id]
-                                                        : selectedServices.filter(id => id !== service.id);
-                                                    setSelectedServices(newServices);
-                                                    setFormData(prev => ({
-                                                        ...prev,
-                                                        additional_services: newServices.map(id => ADDITIONAL_SERVICES.find(s => s.id === id)?.name).join(', ')
-                                                    }));
-                                                }}
-                                            />
-                                            <div className="flex flex-col">
-                                                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{service.name}</span>
-                                                <span className="text-[10px] text-slate-400 font-medium">
-                                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(service.price)}
-                                                    {service.type === 'daily' ? '/diária' : ' (único)'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        {selectedServices.includes(service.id) && (
-                                            <span className="text-[10px] font-black text-primary">
-                                                +{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(service.type === 'daily' ? service.price * currentDays : service.price)}
-                                            </span>
-                                        )}
-                                    </label>
-                                ))}
                             </div>
                         </div>
                     </div>

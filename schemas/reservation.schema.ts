@@ -8,6 +8,11 @@ export const reservationSchema = z.object({
     daily_rate: z.number().min(0),
     security_deposit: z.number().min(0),
     insurance_value: z.number().min(0),
+    insurance_details: z.array(z.object({
+        name: z.string(),
+        value: z.number(),
+        selected: z.boolean()
+    })).optional(),
     additional_services: z.string().optional(),
     pickup_photos: z.array(z.string()).optional(),
     actual_pickup_date: z.string().optional(),
