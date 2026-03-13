@@ -281,61 +281,14 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
             </div>
           </div>
 
-          {/* PÁGINA 3: SEGURO PREMIUM (INFORMATIVA) */}
-          <div className="p-[20mm] relative flex flex-col box-border" style={{ pageBreakAfter: 'always', height: '296mm' }}>
-            <div className="bg-emerald-600 text-white px-6 py-2 rounded-xl mb-10 flex items-center gap-3 w-full">
-              <span className="material-symbols-outlined">verified_user</span>
-              <h3 className="text-sm font-black uppercase tracking-[0.2em]">05. Seguro Premium Incluso</h3>
-            </div>
-
-            <div className="flex-1">
-              <div className="bg-emerald-50/50 rounded-3xl border-2 border-emerald-100 p-8">
-                <div className="flex items-center gap-4 mb-8">
-                  <div className="size-16 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-xl shadow-emerald-600/20">
-                    <span className="material-symbols-outlined text-4xl">security</span>
-                  </div>
-                  <div>
-                    <h4 className="text-xl font-black text-emerald-900 uppercase tracking-tight">Proteção Total Midas</h4>
-                    <p className="text-xs text-emerald-600 font-bold uppercase tracking-widest">Sua tranquilidade é nossa prioridade</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-y-4">
-                  {reservation.insurance_details?.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-3 border-b border-emerald-100 pb-3">
-                      <span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span>
-                      <span className="text-[11px] font-bold text-slate-700 uppercase leading-tight">{item.name}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-10 p-6 bg-white rounded-2xl border border-emerald-100 shadow-sm">
-                  <h5 className="text-[11px] font-black text-emerald-800 uppercase tracking-widest mb-3 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-sm">info</span>
-                    Condições Gerais
-                  </h5>
-                  <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
-                    O Seguro Premium Midas já está incluso no valor da sua locação. Ele oferece cobertura abrangente para os itens listados acima, 
-                    sujeito às condições contratuais de participação (franquia) e normas de segurança da locadora. 
-                    Em caso de qualquer evento, entre em contato imediatamente com nossa assistência 24h.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-auto text-center border-t border-slate-100 pt-6">
-              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">MIDAS RENT A CAR - Proteção Premium Inclusa</p>
-            </div>
-          </div>
-
-          {/* PÁGINA 4: ORIENTAÇÕES */}
-          <div className="p-[20mm] relative flex flex-col bg-slate-50 box-border" style={{ height: '296mm' }}>
+          {/* PÁGINA 3: ORIENTAÇÕES (TÓPICO 05) */}
+          <div className="p-[20mm] relative flex flex-col bg-slate-50 box-border" style={{ pageBreakAfter: 'always', height: '296mm' }}>
             <div className="bg-primary text-white px-6 py-2 rounded-xl mb-10 flex items-center gap-3 w-full">
               <span className="material-symbols-outlined">info</span>
-              <h3 className="text-sm font-black uppercase tracking-[0.2em]">06. Orientações sobre a Locação</h3>
+              <h3 className="text-sm font-black uppercase tracking-[0.2em]">05. Orientações sobre a Locação</h3>
             </div>
 
-            <div className="space-y-8 text-[11px] leading-relaxed text-slate-700">
+            <div className="space-y-8 text-[11px] leading-relaxed text-slate-700 flex-1">
               <section>
                 <h4 className="text-[13px] font-black text-primary uppercase border-b border-primary/20 pb-1 mb-3">Informações Importantes</h4>
                 <ul className="list-disc pl-5 space-y-2">
@@ -381,6 +334,53 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
 
             <div className="mt-auto text-center border-t border-slate-200 pt-6">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">MIDAS RENT A CAR - Tianguá, CE</p>
+            </div>
+          </div>
+
+          {/* PÁGINA 4: SEGURO PREMIUM (TÓPICO 06) */}
+          <div className="p-[20mm] relative flex flex-col box-border" style={{ height: '296mm' }}>
+            <div className="bg-emerald-600 text-white px-6 py-2 rounded-xl mb-10 flex items-center gap-3 w-full">
+              <span className="material-symbols-outlined">verified_user</span>
+              <h3 className="text-sm font-black uppercase tracking-[0.2em]">06. Seguro Premium Incluso</h3>
+            </div>
+
+            <div className="flex-1">
+              <div className="bg-emerald-50/50 rounded-3xl border-2 border-emerald-100 p-8">
+                <div className="flex items-center gap-4 mb-8">
+                  <div className="size-16 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-xl shadow-emerald-600/20">
+                    <span className="material-symbols-outlined text-4xl">security</span>
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-black text-emerald-900 uppercase tracking-tight">Proteção Total Midas</h4>
+                    <p className="text-xs text-emerald-600 font-bold uppercase tracking-widest">Sua tranquilidade é nossa prioridade</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-y-4">
+                  {reservation.insurance_details?.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-3 border-b border-emerald-100 pb-3">
+                      <span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span>
+                      <span className="text-[11px] font-bold text-slate-700 uppercase leading-tight">{item.name}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-10 p-6 bg-white rounded-2xl border border-emerald-100 shadow-sm">
+                  <h5 className="text-[11px] font-black text-emerald-800 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-sm">info</span>
+                    Condições Gerais
+                  </h5>
+                  <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                    O Seguro Premium Midas já está incluso no valor da sua locação. Ele oferece cobertura abrangente para os itens listados acima, 
+                    sujeito às condições contratuais de participação (franquia) e normas de segurança da locadora. 
+                    Em caso de qualquer evento, entre em contato imediatamente com nossa assistência 24h.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-auto text-center border-t border-slate-100 pt-6">
+              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">MIDAS RENT A CAR - Proteção Premium Inclusa</p>
             </div>
           </div>
 
