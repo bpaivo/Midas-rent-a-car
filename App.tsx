@@ -27,7 +27,7 @@ import ProfileModal from './components/ProfileModal';
 const createSafeMutation = async <T extends any>(promiseOrBuilder: PromiseLike<T>): Promise<T> => {
   let timeoutId: NodeJS.Timeout;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Conexão instável ou Sessão Expirada. O banco de dados não respondeu a tempo.')), 12000);
+    timeoutId = setTimeout(() => reject(new Error('Conexão instável. O banco de dados não respondeu a tempo.')), 15000);
   });
   try {
     const result = await Promise.race([Promise.resolve(promiseOrBuilder), timeoutPromise]);
@@ -66,58 +66,61 @@ const MainContent: React.FC = () => {
     }
 
     try {
-      const fetchPromise = Promise.all([
-        supabase.from('clients').select('*').order('name').limit(1500),
-        supabase.from('vehicles').select('*').order('model').limit(500),
-        supabase.from('reservations').select('*').order('created_at', { ascending: false }).limit(800)
+      // Carregamento Incremental: Busca cada recurso de forma independente
+      // para que um erro em um não trave os outros.
+      
+      const fetchClients = async () => {
+        const { data, error } = await supabase.from('clients').select('*').order('name').limit(1000);
+        if (error) throw error;
+        setClients(data || []);
+        return data || [];
+      };
+
+      const fetchVehicles = async () => {
+        const { data, error } = await supabase.from('vehicles').select('*').order('model').limit(500);
+        if (error) throw error;
+        setVehicles(data || []);
+        return data || [];
+      };
+
+      const fetchReservations = async (currentClients: Client[], currentVehicles: Vehicle[]) => {
+        const { data, error } = await supabase.from('reservations').select('*').order('created_at', { ascending: false }).limit(500);
+        if (error) throw error;
+        
+        if (data) {
+          const transformed: Reservation[] = data.map((r: any) => {
+            const client = currentClients.find(c => c.id === r.client_id);
+            const vehicle = currentVehicles.find(v => v.id === r.vehicle_id);
+            return {
+              ...r,
+              clientName: client?.name || 'Cliente não encontrado',
+              vehicleModel: vehicle?.model || 'Veículo não encontrado',
+              vehiclePlate: vehicle?.plate || '---',
+              dateStr: new Date(r.created_at).toLocaleDateString('pt-BR')
+            };
+          });
+          setReservations(transformed);
+        }
+      };
+
+      // Executa as buscas. Se falhar, o erro será capturado no catch global.
+      const [loadedClients, loadedVehicles] = await Promise.all([
+        fetchClients(),
+        fetchVehicles()
       ]);
 
-      let timeoutId: NodeJS.Timeout;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        // Aumentado para 25 segundos para conexões mais lentas
-        timeoutId = setTimeout(() => reject(new Error('Data Fetch Timeout')), 25000);
-      });
-
-      const [clientsRes, vehiclesRes, reservationsRes] = await Promise.race([fetchPromise, timeoutPromise]) as any;
-      clearTimeout(timeoutId!);
-
-      if (clientsRes.error) throw clientsRes.error;
-      if (vehiclesRes.error) throw vehiclesRes.error;
-      if (reservationsRes.error) throw reservationsRes.error;
-
-      const currentClients = clientsRes.data || [];
-      const currentVehicles = vehiclesRes.data || [];
-      
-      setClients(currentClients);
-      setVehicles(currentVehicles);
-
-      if (reservationsRes.data) {
-        const transformed: Reservation[] = reservationsRes.data.map((r: any) => {
-          const client = currentClients.find(c => c.id === r.client_id);
-          const vehicle = currentVehicles.find(v => v.id === r.vehicle_id);
-          return {
-            ...r,
-            clientName: client?.name || 'Cliente não encontrado',
-            vehicleModel: vehicle?.model || 'Veículo não encontrado',
-            vehiclePlate: vehicle?.plate || '---',
-            dateStr: new Date(r.created_at).toLocaleDateString('pt-BR')
-          };
-        });
-        setReservations(transformed);
-      }
+      // Busca as reservas usando os dados de clientes e veículos já carregados
+      await fetchReservations(loadedClients, loadedVehicles);
 
       if (isManual) toast.success('Dados atualizados!', { id: toastId });
     } catch (error: any) {
       console.error('[App] Erro ao carregar dados:', error);
       
-      if (error.message === 'Data Fetch Timeout') {
-        toast.error('A conexão com o banco de dados está lenta. Tente atualizar a página.', { id: toastId || undefined });
-      } else if (error.code === 'PGRST301' || error.message?.includes('JWT') || error.message?.includes('Sessão Expirada')) {
+      if (error.code === 'PGRST301' || error.message?.includes('JWT') || error.message?.includes('Sessão Expirada')) {
         toast.error('Sua sessão expirou. Faça login novamente.');
         logout();
       } else {
-        // Não desloga em erros genéricos para evitar loops de login
-        toast.error(`Erro ao carregar dados: ${error.message || 'Verifique sua conexão'}`, { id: toastId || undefined });
+        toast.error(`Erro de conexão: ${error.message || 'Verifique sua internet'}`, { id: toastId || undefined });
       }
     } finally {
       setIsLoading(false);
