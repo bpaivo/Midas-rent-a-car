@@ -213,14 +213,14 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
                     <p className="text-[8px] font-black text-amber-600 uppercase tracking-widest mb-0.5">Caução</p>
                     <p className="text-sm font-black text-amber-700">{money(reservation.security_deposit)}</p>
                   </div>
-                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Seguro Total</p>
-                    <p className="text-sm font-black text-slate-900">{money(reservation.insurance_value || 0)}</p>
+                  <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                    <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">Seguro Premium</p>
+                    <p className="text-sm font-black text-emerald-700 uppercase">Incluso</p>
                   </div>
                   <div className="col-span-3 bg-[#006666] p-5 rounded-2xl shadow-lg flex items-center justify-center gap-10 mt-2">
                     <div className="text-center">
                       <p className="text-[10px] font-black text-white/70 uppercase tracking-widest mb-0">Total da Reserva</p>
-                      <p className="text-[9px] text-white/50 leading-none">(Diárias totais + seguro)</p>
+                      <p className="text-[9px] text-white/50 leading-none">(Diárias totais + serviços)</p>
                     </div>
                     <div className="text-center">
                       <p className="text-3xl font-black text-white tracking-tight leading-none">{money(totalReserva)}</p>
@@ -281,60 +281,50 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
             </div>
           </div>
 
-          {/* PÁGINA 3: INFORMAÇÕES DO SEGURO (NOVA) */}
+          {/* PÁGINA 3: SEGURO PREMIUM (INFORMATIVA) */}
           <div className="p-[20mm] relative flex flex-col box-border" style={{ pageBreakAfter: 'always', height: '296mm' }}>
-            <div className="bg-primary text-white px-6 py-2 rounded-xl mb-10 flex items-center gap-3 w-full">
-              <span className="material-symbols-outlined">security</span>
-              <h3 className="text-sm font-black uppercase tracking-[0.2em]">05. Informações do Seguro</h3>
+            <div className="bg-emerald-600 text-white px-6 py-2 rounded-xl mb-10 flex items-center gap-3 w-full">
+              <span className="material-symbols-outlined">verified_user</span>
+              <h3 className="text-sm font-black uppercase tracking-[0.2em]">05. Seguro Premium Incluso</h3>
             </div>
 
             <div className="flex-1">
-              <div className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-900 text-white">
-                      <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest">Cobertura Contratada</th>
-                      <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-right">Valor (R$)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {reservation.insurance_details && reservation.insurance_details.length > 0 ? (
-                      reservation.insurance_details.map((item, idx) => (
-                        <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                          <td className="px-6 py-3 text-[11px] font-bold text-slate-700 uppercase">{item.name}</td>
-                          <td className="px-6 py-3 text-[11px] font-black text-slate-900 text-right">{money(item.value)}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={2} className="px-6 py-10 text-center text-slate-400 italic text-xs">Nenhuma cobertura adicional selecionada.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-primary/5 border-t-2 border-primary">
-                      <td className="px-6 py-4 text-xs font-black text-primary uppercase tracking-widest">Valor Total do Seguro</td>
-                      <td className="px-6 py-4 text-base font-black text-primary text-right">{money(reservation.insurance_value || 0)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+              <div className="bg-emerald-50/50 rounded-3xl border-2 border-emerald-100 p-8">
+                <div className="flex items-center gap-4 mb-8">
+                  <div className="size-16 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-xl shadow-emerald-600/20">
+                    <span className="material-symbols-outlined text-4xl">security</span>
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-black text-emerald-900 uppercase tracking-tight">Proteção Total Midas</h4>
+                    <p className="text-xs text-emerald-600 font-bold uppercase tracking-widest">Sua tranquilidade é nossa prioridade</p>
+                  </div>
+                </div>
 
-              <div className="mt-10 p-6 bg-amber-50 rounded-2xl border border-amber-200">
-                <h4 className="text-[11px] font-black text-amber-800 uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-sm">info</span>
-                  Observações Importantes
-                </h4>
-                <p className="text-[10px] text-amber-700 leading-relaxed font-medium">
-                  As coberturas acima descritas seguem as condições gerais da apólice de seguro da Midas Rent a Car. 
-                  Em caso de sinistro, o locatário deverá apresentar o Boletim de Ocorrência e colaborar com todos os procedimentos da seguradora. 
-                  A franquia (caução) poderá ser utilizada para cobrir danos não amparados ou dentro do limite de participação do locatário.
-                </p>
+                <div className="grid grid-cols-1 gap-y-4">
+                  {reservation.insurance_details?.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-3 border-b border-emerald-100 pb-3">
+                      <span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span>
+                      <span className="text-[11px] font-bold text-slate-700 uppercase leading-tight">{item.name}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-10 p-6 bg-white rounded-2xl border border-emerald-100 shadow-sm">
+                  <h5 className="text-[11px] font-black text-emerald-800 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-sm">info</span>
+                    Condições Gerais
+                  </h5>
+                  <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                    O Seguro Premium Midas já está incluso no valor da sua locação. Ele oferece cobertura abrangente para os itens listados acima, 
+                    sujeito às condições contratuais de participação (franquia) e normas de segurança da locadora. 
+                    Em caso de qualquer evento, entre em contato imediatamente com nossa assistência 24h.
+                  </p>
+                </div>
               </div>
             </div>
 
             <div className="mt-auto text-center border-t border-slate-100 pt-6">
-              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">MIDAS RENT A CAR - Proteção e Segurança</p>
+              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">MIDAS RENT A CAR - Proteção Premium Inclusa</p>
             </div>
           </div>
 

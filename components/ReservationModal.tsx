@@ -55,12 +55,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
         status: ReservationStatus.AGUARDANDO
     });
     const [selectedServices, setSelectedServices] = useState<string[]>([]);
-    const [insuranceDetails, setInsuranceDetails] = useState<InsuranceItem[]>(
-        INSURANCE_COVERAGES.map(name => ({ name, value: 0, selected: false }))
-    );
     const [progressiveDiscounts, setProgressiveDiscounts] = useState<ProgressiveDiscount[]>([]);
-    const [defaultInsuranceItemValue, setDefaultInsuranceItemValue] = useState(0);
-    const [isManualDiscount, setIsManualDiscount] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [occupiedRanges, setOccupiedRanges] = useState<{ start: Date; end: Date }[]>([]);
     const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
@@ -130,33 +125,6 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
         return () => { isAborted.aborted = true; };
     }, [formData.vehicle_id]);
 
-    useEffect(() => {
-        const total = insuranceDetails
-            .filter(item => item.selected)
-            .reduce((sum, item) => sum + item.value, 0);
-        setFormData(prev => ({ ...prev, insurance_value: total }));
-    }, [insuranceDetails]);
-
-    const handleInsuranceToggle = (index: number) => {
-        setInsuranceDetails(prev => prev.map((item, i) => {
-            if (i === index) {
-                const newSelected = !item.selected;
-                return {
-                    ...item,
-                    selected: newSelected,
-                    value: newSelected ? defaultInsuranceItemValue : 0
-                };
-            }
-            return item;
-        }));
-    };
-
-    const handleInsuranceValueChange = (index: number, newValue: number) => {
-        setInsuranceDetails(prev => prev.map((item, i) => 
-            i === index ? { ...item, value: newValue } : item
-        ));
-    };
-
     const handleServiceToggle = (serviceId: string) => {
         setSelectedServices(prev => 
             prev.includes(serviceId) 
@@ -195,7 +163,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
             }
         });
 
-        subtotal += servicesTotal + formData.insurance_value;
+        subtotal += servicesTotal; // Seguro agora é 0 (incluso)
 
         return { days, subtotal, currentDailyRate, servicesTotal };
     };
@@ -217,8 +185,9 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
             daily_rate: currentDailyRate,
             days: currentDays,
             total_value: currentSubtotal,
+            insurance_value: 0, // Sempre 0 pois está incluso
             additional_services: selectedServices.join(', '),
-            insurance_details: insuranceDetails.filter(item => item.selected)
+            insurance_details: INSURANCE_COVERAGES.map(name => ({ name, value: 0, selected: true }))
         };
 
         const validation = reservationSchema.safeParse(dataToSave);
@@ -391,60 +360,28 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                         </div>
                     </div>
 
-                    <div className="space-y-4 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div>
-                                <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Informações do Seguro</h3>
-                                <p className="text-[10px] text-slate-500 font-bold uppercase">Selecione as coberturas desejadas</p>
+                    {/* Bloco Informativo: Seguro Premium */}
+                    <div className="space-y-4 p-6 bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-200 dark:border-emerald-800/30">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="size-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                                    <span className="material-symbols-outlined">verified_user</span>
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-emerald-900 dark:text-emerald-400 uppercase tracking-wider">Seguro Premium</h3>
+                                    <p className="text-[10px] text-emerald-600 dark:text-emerald-500 font-bold uppercase">Proteção Total Inclusa na Locação</p>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor Padrão Item (R$)</label>
-                                <input 
-                                    type="number"
-                                    className="w-20 h-8 bg-slate-50 dark:bg-slate-900 border-none rounded-lg text-xs font-bold dark:text-white"
-                                    value={defaultInsuranceItemValue}
-                                    onChange={e => setDefaultInsuranceItemValue(Number(e.target.value))}
-                                />
-                            </div>
+                            <span className="px-3 py-1 bg-emerald-500 text-white text-[10px] font-black uppercase rounded-full tracking-widest">Incluso</span>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-                            {insuranceDetails.map((item, index) => (
-                                <div 
-                                    key={item.name}
-                                    className={`flex items-center justify-between p-3 rounded-xl border transition-all ${item.selected 
-                                        ? 'bg-primary/5 border-primary/30 ring-1 ring-primary/30' 
-                                        : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:bg-slate-50'}`}
-                                >
-                                    <div className="flex items-center gap-3 flex-1">
-                                        <input 
-                                            type="checkbox"
-                                            className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
-                                            checked={item.selected}
-                                            onChange={() => handleInsuranceToggle(index)}
-                                        />
-                                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 leading-tight">{item.name}</span>
-                                    </div>
-                                    {item.selected && (
-                                        <div className="flex items-center gap-2 ml-4">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase">R$</span>
-                                            <input 
-                                                type="number"
-                                                className="w-20 h-8 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-xs font-bold dark:text-white text-right"
-                                                value={item.value}
-                                                onChange={e => handleInsuranceValueChange(index, Number(e.target.value))}
-                                            />
-                                        </div>
-                                    )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 mt-4">
+                            {INSURANCE_COVERAGES.map((coverage, idx) => (
+                                <div key={idx} className="flex items-start gap-2">
+                                    <span className="material-symbols-outlined text-emerald-500 text-sm mt-0.5">check_circle</span>
+                                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 leading-tight uppercase">{coverage}</span>
                                 </div>
                             ))}
-                        </div>
-
-                        <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Seguro</span>
-                            <span className="text-lg font-black text-primary dark:text-accent-sunshine">
-                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(formData.insurance_value)}
-                            </span>
                         </div>
                     </div>
 
@@ -474,11 +411,9 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                                         Serviços: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(servicesTotal)}
                                     </span>
                                 )}
-                                {formData.insurance_value > 0 && (
-                                    <span className="text-[10px] text-indigo-600/60 font-medium">
-                                        Seguro: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(formData.insurance_value)}
-                                    </span>
-                                )}
+                                <span className="text-[10px] text-emerald-600 font-bold">
+                                    Seguro Premium: Incluso (R$ 0,00)
+                                </span>
                             </div>
                         </div>
                     </div>
