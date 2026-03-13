@@ -174,6 +174,7 @@ const PublicLanding: React.FC = () => {
             muted 
             loop 
             playsInline
+            controls
           />
         </div>
         <div className="space-y-8 order-1 lg:order-2">
@@ -194,7 +195,7 @@ const PublicLanding: React.FC = () => {
             </h4>
             <ul className="space-y-4">
               {[
-                'Frota diversificada para todos os perfis.',
+                'Frota diversificada para todos os profiles.',
                 'Cobertura completa em Tianguá e região.',
                 'Atendimento personalizado e humanizado.',
                 'Foco em pontualidade e segurança do veículo.'
