@@ -8,7 +8,6 @@ import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 import { useApp } from './hooks/useApp';
 import ErrorBoundary from './components/ErrorBoundary';
-import { retryAsync } from './utils/retry';
 
 // Lazy Views
 const Login = React.lazy(() => import('./views/Login'));
@@ -30,7 +29,6 @@ const MainContent: React.FC = () => {
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-  // Data States
   const [isLoading, setIsLoading] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -38,51 +36,35 @@ const MainContent: React.FC = () => {
   
   const isFetching = useRef(false);
 
-  const fetchData = useCallback(async (options: { isManual?: boolean, silent?: boolean, forceRepair?: boolean } = {}) => {
-    const { isManual = false, silent = false, forceRepair = false } = options;
-    
+  const fetchData = useCallback(async (options: { isManual?: boolean } = {}) => {
     if (!session?.user?.id || isFetching.current) return;
     
     isFetching.current = true;
-    if (!silent) setIsLoading(true);
-    const toastId = isManual ? toast.loading(forceRepair ? 'Reparando sistema...' : 'Sincronizando...') : null;
+    if (!options.isManual) setIsLoading(true);
+    const toastId = options.isManual ? toast.loading('Sincronizando...') : null;
 
     try {
-      if (forceRepair) {
-        await repairSession();
-      }
-
-      // Busca de dados com Retry
-      const fetchWithRetry = async (table: string) => {
-        return await retryAsync(async () => {
-          const { data, error } = await supabase.from(table).select('*').limit(1000);
-          if (error) throw error;
-          return data;
-        }, 2, 1000); // Aumentado o delay entre tentativas
-      };
-
-      const [clientsData, vehiclesData, reservationsData] = await Promise.allSettled([
-        fetchWithRetry('clients'),
-        fetchWithRetry('vehicles'),
-        fetchWithRetry('reservations')
+      // Busca direta e simples para evitar overhead de retentativas complexas que escondem erros
+      const [cRes, vRes, rRes] = await Promise.all([
+        supabase.from('clients').select('*'),
+        supabase.from('vehicles').select('*'),
+        supabase.from('reservations').select('*')
       ]);
 
-      const currentClients = clientsData.status === 'fulfilled' ? (clientsData.value || []) : clients;
-      const currentVehicles = vehiclesData.status === 'fulfilled' ? (vehiclesData.value || []) : vehicles;
-      const currentReservations = reservationsData.status === 'fulfilled' ? (reservationsData.value || []) : [];
+      if (cRes.error) throw cRes.error;
+      if (vRes.error) throw vRes.error;
+      if (rRes.error) throw rRes.error;
 
-      // Se tudo vier vazio mas temos sessão, pode ser um problema de token
-      if (currentClients.length === 0 && currentVehicles.length === 0 && !silent && !isManual) {
-        console.warn('[App] Dados vazios detectados com sessão ativa. Tentando refresh silencioso...');
-        await supabase.auth.refreshSession();
-      }
+      const currentClients = cRes.data || [];
+      const currentVehicles = vRes.data || [];
+      const currentReservations = rRes.data || [];
 
-      setClients(currentClients as Client[]);
-      setVehicles(currentVehicles as Vehicle[]);
+      setClients(currentClients);
+      setVehicles(currentVehicles);
 
-      const transformed: Reservation[] = (currentReservations as any[]).map((r: any) => {
-        const client = (currentClients as Client[]).find(c => c.id === r.client_id);
-        const vehicle = (currentVehicles as Vehicle[]).find(v => v.id === r.vehicle_id);
+      const transformed: Reservation[] = currentReservations.map((r: any) => {
+        const client = currentClients.find(c => c.id === r.client_id);
+        const vehicle = currentVehicles.find(v => v.id === r.vehicle_id);
         return {
           ...r,
           clientName: client?.name || 'N/A',
@@ -93,25 +75,25 @@ const MainContent: React.FC = () => {
       });
       
       setReservations(transformed);
-      
-      if (isManual) {
-        toast.success('Dados sincronizados!', { id: toastId || undefined });
-      }
+      if (options.isManual) toast.success('Dados atualizados!', { id: toastId || undefined });
 
     } catch (error: any) {
-      console.error('[App] Erro no carregamento:', error);
-      if (isManual) toast.error('Erro ao carregar dados. Verifique sua conexão.', { id: toastId || undefined });
+      console.error('[App] Erro ao buscar dados:', error);
+      if (error.code === 'PGRST301' || error.message?.includes('JWT')) {
+        toast.error('Sessão expirada. Reiniciando...');
+        repairSession();
+      } else {
+        toast.error('Erro de conexão com o banco de dados.', { id: toastId || undefined });
+      }
     } finally {
       setIsLoading(false);
       isFetching.current = false;
     }
-  }, [session?.user?.id, repairSession, clients, vehicles]);
+  }, [session?.user?.id, repairSession]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-  const userRole = profile?.role || 'user';
 
   return (
     <Layout
@@ -124,9 +106,7 @@ const MainContent: React.FC = () => {
     >
       <button 
         onClick={() => fetchData({ isManual: true })}
-        onDoubleClick={() => fetchData({ isManual: true, forceRepair: true })}
         className="fixed bottom-6 right-6 z-50 size-12 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
-        title="Sincronizar (Clique duplo para reparar)"
       >
         <span className="material-symbols-outlined group-hover:rotate-180 transition-transform duration-500">sync</span>
       </button>
@@ -232,7 +212,7 @@ const MainContent: React.FC = () => {
               }}
             />
           } />
-          <Route path="/users" element={userRole === 'admin' ? <UsersView /> : <Navigate to="/dashboard" replace />} />
+          <Route path="/users" element={profile?.role === 'admin' ? <UsersView /> : <Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </ErrorBoundary>
@@ -293,10 +273,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (!session) {
-    return <Navigate to="/login" replace />;
-  }
-
+  if (!session) return <Navigate to="/login" replace />;
   return <>{children}</>;
 };
 
@@ -313,20 +290,10 @@ const App: React.FC = () => {
   return (
     <>
       <Toaster position="top-right" />
-      <React.Suspense fallback={
-        <div className="h-full w-full flex items-center justify-center min-h-screen">
-          <span className="animate-spin material-symbols-outlined text-3xl text-primary/20">progress_activity</span>
-        </div>
-      }>
+      <React.Suspense fallback={<div className="min-h-screen flex items-center justify-center"><span className="animate-spin material-symbols-outlined text-3xl text-primary/20">progress_activity</span></div>}>
         <Routes>
-          <Route path="/login" element={
-            <Login onLogin={() => navigate('/dashboard', { replace: true })} />
-          } />
-          <Route path="/*" element={
-            <AuthGuard>
-              <MainContent />
-            </AuthGuard>
-          } />
+          <Route path="/login" element={<Login onLogin={() => navigate('/dashboard', { replace: true })} />} />
+          <Route path="/*" element={<AuthGuard><MainContent /></AuthGuard>} />
         </Routes>
       </React.Suspense>
     </>
