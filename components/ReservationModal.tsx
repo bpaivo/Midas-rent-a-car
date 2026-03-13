@@ -125,7 +125,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                     pickup_date: '',
                     return_date: '',
                     security_deposit: vehicle.default_security_deposit || 0,
-                    insurance_value: vehicle.default_insurance_value || 0
+                    base_rate: vehicle.daily_rate || 0
                 }));
             }
             fetchAvailability(formData.vehicle_id, isAborted);
@@ -161,6 +161,52 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
         ));
     };
 
+    const handleServiceToggle = (serviceId: string) => {
+        setSelectedServices(prev => 
+            prev.includes(serviceId) 
+                ? prev.filter(id => id !== serviceId) 
+                : [...prev, serviceId]
+        );
+    };
+
+    const calculateTotals = () => {
+        if (!formData.pickup_date || !formData.return_date) return { days: 0, subtotal: 0, suggestedDiscount: 0, currentTier: DISCOUNT_TIERS[0], servicesTotal: 0 };
+        const pickup = new Date(formData.pickup_date);
+        const returnD = new Date(formData.return_date);
+        const diffTime = Math.abs(returnD.getTime() - pickup.getTime());
+        const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+
+        const tier = DISCOUNT_TIERS.find(t => days >= t.min && days <= t.max) || DISCOUNT_TIERS[0];
+        const effectiveDiscount = isManualDiscount ? formData.discount_percent : tier.discount;
+
+        const dailyRate = formData.base_rate * (1 - (effectiveDiscount / 100));
+        let subtotal = days * dailyRate;
+
+        let servicesTotal = 0;
+        selectedServices.forEach(serviceId => {
+            const service = ADDITIONAL_SERVICES.find(s => s.id === serviceId);
+            if (service) {
+                if (service.type === 'fixed') {
+                    servicesTotal += service.price;
+                } else {
+                    servicesTotal += service.price * days;
+                }
+            }
+        });
+
+        subtotal += servicesTotal + formData.insurance_value;
+
+        return { days, subtotal, suggestedDiscount: tier.discount, currentTier: tier, servicesTotal };
+    };
+
+    const { days: currentDays, subtotal: currentSubtotal, suggestedDiscount, currentTier, servicesTotal } = calculateTotals();
+
+    useEffect(() => {
+        if (!isManualDiscount && currentDays > 0) {
+            setFormData(prev => ({ ...prev, discount_percent: suggestedDiscount }));
+        }
+    }, [currentDays, suggestedDiscount, isManualDiscount]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -169,21 +215,16 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
             return;
         }
 
-        const pickup = new Date(formData.pickup_date);
-        const returnD = new Date(formData.return_date);
-        const diffTime = Math.abs(returnD.getTime() - pickup.getTime());
-        const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-
         const currentDailyRate = formData.base_rate * (1 - (formData.discount_percent / 100));
-        const total_value = (currentDailyRate * days) + formData.insurance_value;
-
+        
         const { base_rate, discount_percent, ...cleanFormData } = formData;
 
         const dataToSave = {
             ...cleanFormData,
             daily_rate: currentDailyRate,
-            days,
-            total_value,
+            days: currentDays,
+            total_value: currentSubtotal,
+            additional_services: selectedServices.join(', '),
             insurance_details: insuranceDetails.filter(item => item.selected)
         };
 
@@ -218,47 +259,9 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
         });
     };
 
-    const calculateTotals = () => {
-        if (!formData.pickup_date || !formData.return_date) return { days: 0, subtotal: 0, suggestedDiscount: 0, currentTier: DISCOUNT_TIERS[0], servicesTotal: 0 };
-        const pickup = new Date(formData.pickup_date);
-        const returnD = new Date(formData.return_date);
-        const diffTime = Math.abs(returnD.getTime() - pickup.getTime());
-        const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-
-        const tier = DISCOUNT_TIERS.find(t => days >= t.min && days <= t.max) || DISCOUNT_TIERS[0];
-        const effectiveDiscount = isManualDiscount ? formData.discount_percent : tier.discount;
-
-        const dailyRate = formData.base_rate * (1 - (effectiveDiscount / 100));
-        let subtotal = days * dailyRate;
-
-        let servicesTotal = 0;
-        selectedServices.forEach(serviceId => {
-            const service = ADDITIONAL_SERVICES.find(s => s.id === serviceId);
-            if (service) {
-                if (service.type === 'fixed') {
-                    servicesTotal += service.price;
-                } else {
-                    servicesTotal += service.price * days;
-                }
-            }
-        });
-
-        subtotal += servicesTotal;
-
-        return { days, subtotal, suggestedDiscount: tier.discount, currentTier: tier, servicesTotal };
-    };
-
-    const { days: currentDays, subtotal: currentSubtotal, suggestedDiscount, currentTier, servicesTotal } = calculateTotals();
-
-    useEffect(() => {
-        if (!isManualDiscount && currentDays > 0) {
-            setFormData(prev => ({ ...prev, discount_percent: suggestedDiscount }));
-        }
-    }, [currentDays, suggestedDiscount, isManualDiscount]);
-
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto overflow-x-hidden">
+            <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto overflow-x-hidden">
                 <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50 sticky top-0 z-20 backdrop-blur-md">
                     <div>
                         <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Nova Reserva</h2>
@@ -270,6 +273,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-8 space-y-8">
+                    {/* 01. Dados Básicos */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Veículo Disponível</label>
@@ -355,7 +359,70 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                         </div>
                     </div>
 
-                    {/* Bloco de Informações do Seguro */}
+                    {/* 02. Descontos e Serviços */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Desconto Progressivo</h3>
+                                <button 
+                                    type="button"
+                                    onClick={() => setIsManualDiscount(!isManualDiscount)}
+                                    className={`text-[10px] font-black uppercase px-2 py-1 rounded border transition-all ${isManualDiscount ? 'bg-primary text-white border-primary' : 'text-slate-400 border-slate-200'}`}
+                                >
+                                    {isManualDiscount ? 'Manual Ativo' : 'Automático'}
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                {DISCOUNT_TIERS.map(tier => (
+                                    <div 
+                                        key={tier.label}
+                                        className={`p-2 rounded-lg border text-center transition-all ${currentTier.label === tier.label && !isManualDiscount ? 'bg-primary/10 border-primary text-primary' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-700 text-slate-400'}`}
+                                    >
+                                        <p className="text-[9px] font-black uppercase">{tier.label}</p>
+                                        <p className="text-xs font-bold">{tier.discount}% OFF</p>
+                                    </div>
+                                ))}
+                            </div>
+                            {isManualDiscount && (
+                                <div className="pt-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Desconto Manual (%)</label>
+                                    <input 
+                                        type="number"
+                                        className="w-full h-10 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg px-3 text-sm font-bold dark:text-white"
+                                        value={formData.discount_percent}
+                                        onChange={e => setFormData({...formData, discount_percent: Number(e.target.value)})}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Serviços Adicionais</h3>
+                            <div className="space-y-2">
+                                {ADDITIONAL_SERVICES.map(service => (
+                                    <label 
+                                        key={service.id}
+                                        className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${selectedServices.includes(service.id) ? 'bg-primary/5 border-primary/30' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-700'}`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <input 
+                                                type="checkbox"
+                                                className="rounded border-slate-300 text-primary focus:ring-primary"
+                                                checked={selectedServices.includes(service.id)}
+                                                onChange={() => handleServiceToggle(service.id)}
+                                            />
+                                            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{service.name}</span>
+                                        </div>
+                                        <span className="text-[10px] font-black text-primary dark:text-accent-sunshine">
+                                            R$ {service.price.toFixed(2)} {service.type === 'daily' ? '/dia' : ''}
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 03. Informações do Seguro */}
                     <div className="space-y-4 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div>
@@ -413,6 +480,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                         </div>
                     </div>
 
+                    {/* 04. Resumo e Caução */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Caução (R$)</label>
@@ -432,11 +500,16 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ clients, vehicles, 
                             </div>
                             <div className="flex flex-col gap-0.5">
                                 <span className="text-[10px] text-emerald-600/60 font-medium">
-                                    Diária efetiva: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((currentSubtotal - servicesTotal) / (currentDays || 1))}
+                                    Diárias ({currentDays}x): {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(currentDays * (formData.base_rate * (1 - (formData.discount_percent / 100))))}
                                 </span>
                                 {servicesTotal > 0 && (
                                     <span className="text-[10px] text-primary/60 font-medium">
-                                        Serviços inclusos: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(servicesTotal)}
+                                        Serviços: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(servicesTotal)}
+                                    </span>
+                                )}
+                                {formData.insurance_value > 0 && (
+                                    <span className="text-[10px] text-indigo-600/60 font-medium">
+                                        Seguro: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(formData.insurance_value)}
                                     </span>
                                 )}
                             </div>
