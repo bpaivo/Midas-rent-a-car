@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@supabase/supabase-js':
-        specifier: ^2.93.3
+        specifier: ^2.45.0
         version: 2.99.0
       html2pdf.js:
         specifier: ^0.14.0

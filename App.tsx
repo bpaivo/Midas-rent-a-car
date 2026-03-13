@@ -10,6 +10,7 @@ import { useApp } from './hooks/useApp';
 import ErrorBoundary from './components/ErrorBoundary';
 
 // Lazy Views
+const PublicLanding = React.lazy(() => import('./views/PublicLanding'));
 const Login = React.lazy(() => import('./views/Login'));
 const Dashboard = React.lazy(() => import('./views/Dashboard'));
 const ClientsView = React.lazy(() => import('./views/ClientsView'));
@@ -44,7 +45,6 @@ const MainContent: React.FC = () => {
     const toastId = options.isManual ? toast.loading('Sincronizando...') : null;
 
     try {
-      // Busca direta e simples para evitar overhead de retentativas complexas que escondem erros
       const [cRes, vRes, rRes] = await Promise.all([
         supabase.from('clients').select('*'),
         supabase.from('vehicles').select('*'),
@@ -292,6 +292,7 @@ const App: React.FC = () => {
       <Toaster position="top-right" />
       <React.Suspense fallback={<div className="min-h-screen flex items-center justify-center"><span className="animate-spin material-symbols-outlined text-3xl text-primary/20">progress_activity</span></div>}>
         <Routes>
+          <Route path="/" element={<PublicLanding />} />
           <Route path="/login" element={<Login onLogin={() => navigate('/dashboard', { replace: true })} />} />
           <Route path="/*" element={<AuthGuard><MainContent /></AuthGuard>} />
         </Routes>
