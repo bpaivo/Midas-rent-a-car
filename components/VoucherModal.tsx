@@ -55,9 +55,11 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
         scale: 2,
         useCORS: true,
         letterRendering: true,
-        scrollY: 0
+        scrollY: 0,
+        windowWidth: 1200
       },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
 
     try {
@@ -68,29 +70,47 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
   };
 
   const renderDocument = (url?: string, label?: string) => {
-    if (!url) return <p className="text-slate-300 font-bold italic">Documento não disponível</p>;
+    if (!url) return <div className="text-slate-300 font-bold italic text-center">Documento não disponível</div>;
     
     const isPdf = url.toLowerCase().endsWith('.pdf');
     
     if (isPdf) {
       return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 border border-slate-200 rounded-xl p-4">
-          <div className="flex flex-col items-center gap-2 text-center">
-            {/* SVG nativo para garantir renderização no PDF */}
-            <svg className="w-12 h-12 text-rose-500 mb-1" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3.5h-1.25v1.5h1.25V11H19v1.5h-1.5V7h3v1.5zM9 10h1V8.5H9V10zm5.5 1.5h1v-3h-1v3zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z"/>
-            </svg>
-            <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Documento PDF</p>
-            <p className="text-[8px] text-slate-400 font-bold truncate max-w-[180px]">{label}</p>
-            <div className="mt-2 px-3 py-1 bg-slate-200 rounded-full text-[7px] font-black text-slate-500 uppercase tracking-tighter">
-              Anexo Digital
-            </div>
+        <div style={{ 
+          width: '100%', 
+          height: '100%', 
+          backgroundColor: '#f8fafc', 
+          border: '2px solid #e2e8f0', 
+          borderRadius: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div style={{ 
+            width: '50px', 
+            height: '50px', 
+            backgroundColor: '#ef4444', 
+            borderRadius: '10px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            marginBottom: '10px',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+          }}>
+            <span style={{ color: 'white', fontWeight: '900', fontSize: '16px' }}>PDF</span>
+          </div>
+          <div style={{ fontSize: '11px', fontWeight: '900', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Documento Digital</div>
+          <div style={{ fontSize: '9px', color: '#64748b', fontWeight: '700', marginTop: '4px' }}>{label}</div>
+          <div style={{ marginTop: '12px', padding: '4px 12px', backgroundColor: '#e2e8f0', borderRadius: '99px', fontSize: '8px', fontWeight: '900', color: '#475569', textTransform: 'uppercase' }}>
+            Anexo Verificado
           </div>
         </div>
       );
     }
     
-    return <img src={url} crossOrigin="anonymous" className="max-h-full max-w-full w-auto h-auto object-contain" />;
+    return <img src={url} crossOrigin="anonymous" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />;
   };
 
   const totalReserva = reservation.total_value;
@@ -376,19 +396,16 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
                   {reservation.insurance_details?.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-2 border-b border-emerald-50/50 pb-1">
-                      {/* SVG nativo para o checkmark */}
-                      <svg className="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path>
-                      </svg>
-                      <span className="text-[9px] font-bold text-slate-700 uppercase leading-tight">{item.name}</span>
+                    <div key={idx} className="flex items-center gap-2 border-b border-emerald-100/50 pb-1">
+                      <div style={{ width: '10px', height: '10px', backgroundColor: '#10b981', borderRadius: '50%', flexShrink: 0 }}></div>
+                      <span style={{ fontSize: '8.5px', fontWeight: '800', color: '#334155', textTransform: 'uppercase', lineHeight: '1.1' }}>{item.name}</span>
                     </div>
                   ))}
                 </div>
 
-                <div className="mt-10 p-6 bg-white rounded-2xl border border-emerald-100 shadow-sm">
+                <div className="mt-8 p-6 bg-white rounded-2xl border border-emerald-100 shadow-sm">
                   <h5 className="text-[11px] font-black text-emerald-800 uppercase tracking-widest mb-3 flex items-center gap-2">
                     <span className="material-symbols-outlined text-sm">info</span>
                     Condições Gerais
