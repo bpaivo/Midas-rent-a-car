@@ -152,6 +152,7 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
         </div>
 
         <div className="bg-white text-slate-900 font-sans" id="voucher-content" style={{ width: '210mm', margin: '0 auto' }}>
+          {/* PÁGINA 1: DADOS DA RESERVA */}
           <div className="p-[15mm] md:p-[20mm] relative flex flex-col box-border" style={{ pageBreakAfter: 'always', height: '296mm' }}>
             <div className="flex items-center justify-between mb-6 border-b-4 border-primary pb-4">
               <div className="flex items-center gap-6">
@@ -274,6 +275,7 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
             </div>
           </div>
 
+          {/* PÁGINA 2: DOCUMENTAÇÃO */}
           <div className="p-[20mm] relative flex flex-col box-border" style={{ pageBreakAfter: 'always', height: '296mm' }}>
             <div className="bg-slate-900 text-white px-6 py-2 rounded-xl mb-10 flex items-center gap-3 w-full">
               <span className="material-symbols-outlined">identity_platform</span>
@@ -300,6 +302,110 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
               </div>
             </div>
           </div>
+
+          {/* PÁGINA 3: ORIENTAÇÕES (TÓPICO 05) */}
+          <div className="p-[20mm] relative flex flex-col bg-slate-50 box-border" style={{ pageBreakAfter: 'always', height: '296mm' }}>
+            <div className="bg-primary text-white px-6 py-2 rounded-xl mb-10 flex items-center gap-3 w-full">
+              <span className="material-symbols-outlined">info</span>
+              <h3 className="text-sm font-black uppercase tracking-[0.2em]">05. Orientações sobre a Locação</h3>
+            </div>
+
+            <div className="space-y-8 text-[11px] leading-relaxed text-slate-700 flex-1">
+              <section>
+                <h4 className="text-[13px] font-black text-primary uppercase border-b border-primary/20 pb-1 mb-3">Informações Importantes</h4>
+                <ul className="list-disc pl-5 space-y-2">
+                  <li>Por favor, verifique todos os detalhes e discriminações de serviços e valores adicionais contratados antes de assinar qualquer documento.</li>
+                  <li><strong>Travessia de Fronteiras:</strong> consulte com antecedência a locadora sobre a possibilidade de utilizar o carro alugado em viagens internacionais e possíveis custos extras.</li>
+                  <li>No método de pagamento parcial, em caso de cancelamento 48h antes da retirada ou não comparecimento, será retido 100% do valor pré-pago da reserva.</li>
+                </ul>
+              </section>
+
+              <section>
+                <h4 className="text-[13px] font-black text-primary uppercase border-b border-primary/20 pb-1 mb-3">Prazo para Retirada do Veículo</h4>
+                <ul className="list-disc pl-5 space-y-2">
+                  <li><strong>Tolerância para Retirada:</strong> A Midas Rent a Car garantirá sua reserva por até 30 minutos após o horário agendado (respeitando o horário de funcionamento da loja).</li>
+                  <li>Chegar após esse período será considerado não comparecimento (No-Show), resultando no cancelamento da reserva e na aplicação da penalidade cabível.</li>
+                  <li><strong>Requisitos para a retirada:</strong> para retirar o veículo, é necessário cumprir os requisitos da locadora (MIDAS RENT A CAR):
+                    <ul className="list-circle pl-5 mt-2 space-y-1">
+                      <li>Documento oficial com foto</li>
+                      <li>CNH válida</li>
+                      <li>Cartão de crédito físico em nome do titular com limite suficiente para caução</li>
+                      <li>Demais políticas da locadora</li>
+                    </ul>
+                  </li>
+                  <li>Caso algum requisito não seja atendido, a locadora Midas Rent a Car poderá recusar a entrega do veículo (Turn Down).</li>
+                  <li>Não é permitido retirar o veículo antes do horário agendado.</li>
+                </ul>
+              </section>
+
+              <section>
+                <h4 className="text-[13px] font-black text-primary uppercase border-b border-primary/20 pb-1 mb-3">Instruções de Retirada</h4>
+                <p>O veículo poderá ser retirado na sede da locadora, com endereço na <strong>Avenida Prefeito Jaques Nunes, nº 2200, Tianguá-CE</strong>.</p>
+                <p className="mt-2">O veículo também poderá ser entregue em local público dentro dos limites da área urbana de Tianguá-CE sem taxa extra. Para interiores e outras cidades, serão cobrados os custos de entrega.</p>
+              </section>
+
+              <section>
+                <h4 className="text-[13px] font-black text-primary uppercase border-b border-primary/20 pb-1 mb-3">Instruções de Devolução</h4>
+                <p>O veículo poderá ser devolvido na sede da locadora ou em local público dentro da área urbana de Tianguá-CE. Fora desse limite, aplicam-se taxas de deslocamento.</p>
+                <div className="mt-4 p-4 bg-white rounded-lg border border-slate-200">
+                  <h5 className="font-black text-primary uppercase text-[11px] mb-2">Política de Abastecimento</h5>
+                  <p>A locadora exige que o veículo seja devolvido com o <strong>mesmo nível de combustível</strong> presente no momento da retirada. Para evitar cobranças adicionais, verifique atentamente as instruções no contrato.</p>
+                </div>
+              </section>
+            </div>
+
+            <div className="mt-auto text-center border-t border-slate-200 pt-6">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">MIDAS RENT A CAR - Tianguá, CE</p>
+            </div>
+          </div>
+
+          {/* PÁGINA 4: SEGURO PREMIUM (TÓPICO 06) */}
+          <div className="p-[20mm] relative flex flex-col box-border" style={{ height: '296mm' }}>
+            <div className="bg-emerald-600 text-white px-6 py-2 rounded-xl mb-10 flex items-center gap-3 w-full">
+              <span className="material-symbols-outlined">verified_user</span>
+              <h3 className="text-sm font-black uppercase tracking-[0.2em]">06. Seguro Premium Incluso</h3>
+            </div>
+
+            <div className="flex-1">
+              <div className="bg-emerald-50/50 rounded-3xl border-2 border-emerald-100 p-8">
+                <div className="flex items-center gap-4 mb-8">
+                  <div className="size-16 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-xl shadow-emerald-600/20">
+                    <span className="material-symbols-outlined text-4xl">security</span>
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-black text-emerald-900 uppercase tracking-tight">Proteção Total Midas</h4>
+                    <p className="text-xs text-emerald-600 font-bold uppercase tracking-widest">Sua tranquilidade é nossa prioridade</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  {reservation.insurance_details?.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-2 border-b border-emerald-100/50 pb-1">
+                      <div style={{ width: '10px', height: '10px', backgroundColor: '#10b981', borderRadius: '50%', flexShrink: 0 }}></div>
+                      <span style={{ fontSize: '8.5px', fontWeight: '800', color: '#334155', textTransform: 'uppercase', lineHeight: '1.1' }}>{item.name}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-8 p-6 bg-white rounded-2xl border border-emerald-100 shadow-sm">
+                  <h5 className="text-[11px] font-black text-emerald-800 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-sm">info</span>
+                    Condições Gerais
+                  </h5>
+                  <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                    O Seguro Premium Midas já está incluso no valor da sua locação. Ele oferece cobertura abrangente para os itens listados acima, 
+                    sujeito às condições contratuais de participação (franquia) e normas de segurança da locadora. 
+                    Em caso de qualquer evento, entre em contato imediatamente com nossa assistência 24h.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-auto text-center border-t border-slate-100 pt-6">
+              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">MIDAS RENT A CAR - Proteção Premium Inclusa</p>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
