@@ -23,20 +23,6 @@ import VoucherModal from './components/VoucherModal';
 import ReservationModal from './components/ReservationModal';
 import ProfileModal from './components/ProfileModal';
 
-// Helper de Mutação Segura
-const createSafeMutation = async <T extends any>(promiseOrBuilder: PromiseLike<T>): Promise<T> => {
-  let timeoutId: NodeJS.Timeout;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('O banco de dados não respondeu a tempo.')), 15000);
-  });
-  try {
-    const result = await Promise.race([Promise.resolve(promiseOrBuilder), timeoutPromise]);
-    return result;
-  } finally {
-    clearTimeout(timeoutId!);
-  }
-};
-
 const MainContent: React.FC = () => {
   const { session, profile, isDarkMode, toggleDarkMode, logout, repairSession } = useApp();
   const [selectedVoucherRes, setSelectedVoucherRes] = useState<Reservation | null>(null);
@@ -50,71 +36,90 @@ const MainContent: React.FC = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   
   const isFetching = useRef(false);
+  const fetchCount = useRef(0);
 
   const fetchData = useCallback(async (options: { isManual?: boolean, silent?: boolean, forceRepair?: boolean } = {}) => {
     const { isManual = false, silent = false, forceRepair = false } = options;
+    
+    // Se não houver usuário ou já estiver buscando, ignora
     if (!session?.user?.id || isFetching.current) return;
     
-    if (forceRepair) {
-      await repairSession();
-    }
-
     isFetching.current = true;
-    const toastId = isManual ? toast.loading(forceRepair ? 'Reparando conexão...' : 'Sincronizando dados...') : null;
+    fetchCount.current += 1;
     
     if (!silent) setIsLoading(true);
+    const toastId = isManual ? toast.loading(forceRepair ? 'Reparando sistema...' : 'Sincronizando...') : null;
+
+    // Timeout de segurança para o carregamento (12 segundos)
+    const fetchTimeout = setTimeout(() => {
+      if (isFetching.current) {
+        console.warn('[App] Fetch timeout atingido. Resetando estado.');
+        setIsLoading(false);
+        isFetching.current = false;
+        if (isManual) toast.error('A conexão está lenta. Tente novamente.', { id: toastId || undefined });
+      }
+    }, 12000);
 
     try {
-      // Busca Clientes e Veículos primeiro
-      const [clientsRes, vehiclesRes] = await Promise.all([
-        supabase.from('clients').select('*').order('name').limit(1000),
-        supabase.from('vehicles').select('*').order('model').limit(500)
+      // 1. Validação de Integridade (Verifica se o Supabase responde)
+      const { error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        console.error('[App] Sessão inválida detectada:', authError);
+        await repairSession();
+      }
+
+      // 2. Busca de dados em paralelo
+      const [clientsRes, vehiclesRes, reservationsRes] = await Promise.all([
+        supabase.from('clients').select('*').order('name'),
+        supabase.from('vehicles').select('*').order('model'),
+        supabase.from('reservations').select('*').order('created_at', { ascending: false })
       ]);
 
       if (clientsRes.error) throw clientsRes.error;
       if (vehiclesRes.error) throw vehiclesRes.error;
+      if (reservationsRes.error) throw reservationsRes.error;
 
       const currentClients = clientsRes.data || [];
       const currentVehicles = vehiclesRes.data || [];
-      
+      const currentReservations = reservationsRes.data || [];
+
       setClients(currentClients);
       setVehicles(currentVehicles);
 
-      // Busca Reservas
-      const { data: resData, error: resError } = await supabase.from('reservations').select('*').order('created_at', { ascending: false }).limit(500);
-      if (resError) throw resError;
-
-      if (resData) {
-        const transformed: Reservation[] = resData.map((r: any) => {
-          const client = currentClients.find(c => c.id === r.client_id);
-          const vehicle = currentVehicles.find(v => v.id === r.vehicle_id);
-          return {
-            ...r,
-            clientName: client?.name || 'Cliente não encontrado',
-            vehicleModel: vehicle?.model || 'Veículo não encontrado',
-            vehiclePlate: vehicle?.plate || '---',
-            dateStr: new Date(r.created_at).toLocaleDateString('pt-BR')
-          };
-        });
-        setReservations(transformed);
-      }
-
-      if (isManual) toast.success(forceRepair ? 'Sistema reparado!' : 'Dados atualizados!', { id: toastId });
-    } catch (error: any) {
-      console.error('[App] Erro ao carregar dados:', error);
+      // 3. Transformação de dados
+      const transformed: Reservation[] = currentReservations.map((r: any) => {
+        const client = currentClients.find(c => c.id === r.client_id);
+        const vehicle = currentVehicles.find(v => v.id === r.vehicle_id);
+        return {
+          ...r,
+          clientName: client?.name || 'N/A',
+          vehicleModel: vehicle?.model || 'N/A',
+          vehiclePlate: vehicle?.plate || '---',
+          dateStr: new Date(r.created_at).toLocaleDateString('pt-BR')
+        };
+      });
       
-      if (error.code === 'PGRST301' || error.message?.includes('JWT') || error.message?.includes('Sessão Expirada')) {
-        toast.error('Sua sessão expirou. Faça login novamente.');
-        logout();
+      setReservations(transformed);
+      
+      if (isManual) toast.success('Dados sincronizados!', { id: toastId });
+
+    } catch (error: any) {
+      console.error('[App] Erro crítico no carregamento:', error);
+      
+      // Se falhar 3 vezes seguidas, sugere logout
+      if (fetchCount.current >= 3 && !silent) {
+        toast.error('Múltiplas falhas de conexão. Tente sair e entrar novamente.');
       } else {
-        toast.error(`Erro de conexão. Clique no botão de sincronizar no canto inferior.`, { id: toastId || undefined });
+        toast.error('Erro ao carregar dados. Verifique sua conexão.', { id: toastId || undefined });
       }
     } finally {
+      clearTimeout(fetchTimeout);
       setIsLoading(false);
       isFetching.current = false;
     }
-  }, [session?.user?.id, logout, repairSession]);
+  }, [session?.user?.id, repairSession]);
 
+  // Efeito de carregamento inicial
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -130,12 +135,11 @@ const MainContent: React.FC = () => {
       onAddReservation={() => setIsReservationModalOpen(true)}
       onViewProfile={() => setIsProfileModalOpen(true)}
     >
-      {/* Botão de Sincronização Inteligente */}
       <button 
         onClick={() => fetchData({ isManual: true })}
         onDoubleClick={() => fetchData({ isManual: true, forceRepair: true })}
         className="fixed bottom-6 right-6 z-50 size-12 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
-        title="Clique para sincronizar. Clique duplo para reparar conexão."
+        title="Sincronizar (Clique duplo para reparar)"
       >
         <span className="material-symbols-outlined group-hover:rotate-180 transition-transform duration-500">sync</span>
       </button>
@@ -160,17 +164,17 @@ const MainContent: React.FC = () => {
               clients={clients}
               isLoading={isLoading}
               onAddClient={async (c) => {
-                const { data, error } = await createSafeMutation(supabase.from('clients').insert([c]).select());
+                const { data, error } = await supabase.from('clients').insert([c]).select();
                 if (error) throw error;
                 if (data && data[0]) setClients(prev => [data[0], ...prev]);
               }}
               onUpdateClient={async (id, c) => {
-                const { data, error } = await createSafeMutation(supabase.from('clients').update(c).eq('id', id).select());
+                const { data, error } = await supabase.from('clients').update(c).eq('id', id).select();
                 if (error) throw error;
                 if (data && data[0]) setClients(prev => prev.map(item => item.id === id ? data[0] : item));
               }}
               onDeleteClient={async (id) => {
-                const { error } = await createSafeMutation(supabase.from('clients').delete().eq('id', id));
+                const { error } = await supabase.from('clients').delete().eq('id', id);
                 if (error) throw error;
                 setClients(prev => prev.filter(item => item.id !== id));
               }}
@@ -181,17 +185,17 @@ const MainContent: React.FC = () => {
               vehicles={vehicles}
               isLoading={isLoading}
               onAddVehicle={async (v) => {
-                const { data, error } = await createSafeMutation(supabase.from('vehicles').insert([v]).select());
+                const { data, error } = await supabase.from('vehicles').insert([v]).select();
                 if (error) throw error;
                 if (data && data[0]) setVehicles(prev => [data[0], ...prev]);
               }}
               onUpdateVehicle={async (id, v) => {
-                const { data, error } = await createSafeMutation(supabase.from('vehicles').update(v).eq('id', id).select());
+                const { data, error } = await supabase.from('vehicles').update(v).eq('id', id).select();
                 if (error) throw error;
                 if (data && data[0]) setVehicles(prev => prev.map(item => item.id === id ? data[0] : item));
               }}
               onDeleteVehicle={async (id) => {
-                const { error } = await createSafeMutation(supabase.from('vehicles').delete().eq('id', id));
+                const { error } = await supabase.from('vehicles').delete().eq('id', id);
                 if (error) throw error;
                 setVehicles(prev => prev.filter(item => item.id !== id));
               }}
@@ -203,11 +207,7 @@ const MainContent: React.FC = () => {
               isLoading={isLoading}
               onEmitVoucher={setSelectedVoucherRes}
               onUpdateReservation={async (id, updates) => {
-                const { data, error } = await createSafeMutation(supabase
-                  .from('reservations')
-                  .update(updates)
-                  .eq('id', id)
-                  .select('*'));
+                const { data, error } = await supabase.from('reservations').update(updates).eq('id', id).select('*');
                 if (error) throw error;
                 if (data && data[0]) {
                   const client = clients.find(c => c.id === data[0].client_id);
@@ -223,10 +223,7 @@ const MainContent: React.FC = () => {
                 }
               }}
               onAddReservation={async (r) => {
-                const { data, error } = await createSafeMutation(supabase
-                  .from('reservations')
-                  .insert([r])
-                  .select('*'));
+                const { data, error } = await supabase.from('reservations').insert([r]).select('*');
                 if (error) throw error;
                 if (data && data[0]) {
                   const client = clients.find(c => c.id === data[0].client_id);
@@ -242,7 +239,7 @@ const MainContent: React.FC = () => {
                 }
               }}
               onDeleteReservation={async (id) => {
-                const { error } = await createSafeMutation(supabase.from('reservations').delete().eq('id', id));
+                const { error } = await supabase.from('reservations').delete().eq('id', id);
                 if (error) throw error;
                 setReservations(prev => prev.filter(item => item.id !== id));
               }}
@@ -268,10 +265,7 @@ const MainContent: React.FC = () => {
           vehicles={vehicles}
           onClose={() => setIsReservationModalOpen(false)}
           onSave={async (r) => {
-            const { data, error } = await createSafeMutation(supabase
-              .from('reservations')
-              .insert([r])
-              .select('*'));
+            const { data, error } = await supabase.from('reservations').insert([r]).select('*');
             if (error) throw error;
             if (data && data[0]) {
               const client = clients.find(c => c.id === data[0].client_id);
