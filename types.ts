@@ -17,6 +17,11 @@ export interface InsuranceItem {
   selected: boolean;
 }
 
+export interface ProgressiveDiscount {
+  day: number;
+  discount_percent: number;
+}
+
 export interface Client {
   id: string;
   name: string;
@@ -104,4 +109,4 @@ export interface UserProfile {
   avatar_url?: string;
 }
 
-export type View = 'LOGIN' | 'DASHBOARD' | 'CLIENTS' | 'VEHICLES' | 'RESERVATIONS' | 'SETTINGS' | 'USERS';
+export type View = 'LOGIN' | 'DASHBOARD' | 'CLIENTS' | 'VEHICLES' | 'RESERVATIONS' | 'SETTINGS' | 'USERS' | 'DISCOUNTS';

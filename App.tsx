@@ -17,6 +17,7 @@ const ClientsView = React.lazy(() => import('./views/ClientsView'));
 const VehiclesView = React.lazy(() => import('./views/VehiclesView'));
 const ReservationsView = React.lazy(() => import('./views/ReservationsView'));
 const UsersView = React.lazy(() => import('./views/UsersView'));
+const ProgressiveDiscountsView = React.lazy(() => import('./views/ProgressiveDiscountsView'));
 
 // Components
 import Layout from './components/Layout';
@@ -212,6 +213,7 @@ const MainContent: React.FC = () => {
               }}
             />
           } />
+          <Route path="/discounts" element={<ProgressiveDiscountsView />} />
           <Route path="/users" element={profile?.role === 'admin' ? <UsersView /> : <Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
