@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Vehicle } from '../types';
+import { Github } from 'lucide-react';
 
 const PublicLanding: React.FC = () => {
   const navigate = useNavigate();
@@ -373,9 +374,20 @@ const PublicLanding: React.FC = () => {
       {/* Footer */}
       <footer className="py-12 border-t border-slate-100 text-center">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="flex items-center gap-3">
-            <img src="/Logo-verde.png" alt="Midas Logo" className="h-8 w-auto" />
-            <p className="text-sm font-bold text-slate-400">© 2024 Midas Rent a Car. Todos os direitos reservados.</p>
+          <div className="flex flex-col items-center md:items-start gap-4">
+            <div className="flex items-center gap-3">
+              <img src="/Logo-verde.png" alt="Midas Logo" className="h-8 w-auto" />
+              <p className="text-sm font-bold text-slate-400">© 2024 Midas Rent a Car. Todos os direitos reservados.</p>
+            </div>
+            <a 
+              href="https://github.com/WillianDev99" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-slate-400 hover:text-primary transition-colors flex items-center gap-2 text-xs font-bold uppercase tracking-widest"
+            >
+              <Github size={18} />
+              <span>Desenvolvido por WillianDev99</span>
+            </a>
           </div>
           <div className="flex gap-8 text-xs font-black text-slate-400 uppercase tracking-widest">
             <a href="#" className="hover:text-primary transition-colors">Privacidade</a>
