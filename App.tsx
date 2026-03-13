@@ -48,21 +48,19 @@ const MainContent: React.FC = () => {
     const toastId = isManual ? toast.loading(forceRepair ? 'Reparando sistema...' : 'Sincronizando...') : null;
 
     try {
-      // Se for reparo forçado, limpa caches antes
       if (forceRepair) {
         await repairSession();
       }
 
-      // Busca de dados com Retry e Timeout individual
+      // Busca de dados com Retry
       const fetchWithRetry = async (table: string) => {
         return await retryAsync(async () => {
           const { data, error } = await supabase.from(table).select('*').limit(1000);
           if (error) throw error;
           return data;
-        }, 2, 500);
+        }, 2, 1000); // Aumentado o delay entre tentativas
       };
 
-      // Executa buscas em paralelo mas trata erros individualmente para não travar tudo
       const [clientsData, vehiclesData, reservationsData] = await Promise.allSettled([
         fetchWithRetry('clients'),
         fetchWithRetry('vehicles'),
@@ -73,10 +71,15 @@ const MainContent: React.FC = () => {
       const currentVehicles = vehiclesData.status === 'fulfilled' ? (vehiclesData.value || []) : vehicles;
       const currentReservations = reservationsData.status === 'fulfilled' ? (reservationsData.value || []) : [];
 
+      // Se tudo vier vazio mas temos sessão, pode ser um problema de token
+      if (currentClients.length === 0 && currentVehicles.length === 0 && !silent && !isManual) {
+        console.warn('[App] Dados vazios detectados com sessão ativa. Tentando refresh silencioso...');
+        await supabase.auth.refreshSession();
+      }
+
       setClients(currentClients as Client[]);
       setVehicles(currentVehicles as Vehicle[]);
 
-      // Transformação de dados
       const transformed: Reservation[] = (currentReservations as any[]).map((r: any) => {
         const client = (currentClients as Client[]).find(c => c.id === r.client_id);
         const vehicle = (currentVehicles as Vehicle[]).find(v => v.id === r.vehicle_id);
@@ -92,11 +95,7 @@ const MainContent: React.FC = () => {
       setReservations(transformed);
       
       if (isManual) {
-        if (clientsData.status === 'rejected' || vehiclesData.status === 'rejected' || reservationsData.status === 'rejected') {
-          toast.error('Alguns dados não puderam ser carregados. Tente novamente.', { id: toastId || undefined });
-        } else {
-          toast.success('Dados sincronizados!', { id: toastId || undefined });
-        }
+        toast.success('Dados sincronizados!', { id: toastId || undefined });
       }
 
     } catch (error: any) {

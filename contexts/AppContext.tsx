@@ -21,74 +21,56 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [loading, setLoading] = useState(true);
 
-    // Função de reparo técnico (pode ser chamada manualmente ou automática)
     const repairSession = async () => {
         try {
-            // 1. Limpa caches do navegador que não sejam a própria sessão (evita dados corrompidos)
-            Object.keys(localStorage).forEach(key => {
-                if (!key.includes('midas-auth-token') && !key.includes('supabase.auth')) {
-                    localStorage.removeItem(key);
-                }
-            });
-
-            // 2. Tenta dar um refresh no token sem deslogar
+            console.log('[AuthContext] Iniciando reparo forçado...');
+            // Limpa apenas o que é relacionado ao Supabase para forçar re-autenticação se necessário
+            localStorage.removeItem('supabase.auth.token');
             const { data, error } = await supabase.auth.refreshSession();
             if (error) throw error;
-            
-            if (data.session) {
-                setSession(data.session);
-                return true;
-            }
+            if (data.session) setSession(data.session);
+            return true;
         } catch (err) {
-            console.error('[AuthContext] Erro ao reparar sessão:', err);
+            console.error('[AuthContext] Erro no reparo:', err);
+            return false;
         }
-        return false;
     };
 
     useEffect(() => {
         let mounted = true;
 
         const initializeAuth = async () => {
-            // Timeout de segurança agressivo: 5 segundos para validar acesso
-            const safetyTimeout = setTimeout(() => {
-                if (mounted && loading) {
-                    console.warn('[AuthContext] Timeout de segurança atingido. Liberando interface.');
-                    setLoading(false);
-                }
-            }, 5000);
-
             try {
-                // AUTOMATIZAÇÃO: Sempre tenta reparar/limpar cache no F5
-                await repairSession();
-
-                // Recupera a sessão atualizada
-                const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+                // getUser() é mais seguro que getSession() pois valida com o servidor
+                const { data: { user }, error } = await supabase.auth.getUser();
                 
-                if (error) throw error;
+                if (error || !user) {
+                    if (mounted) {
+                        setSession(null);
+                        setLoading(false);
+                    }
+                    return;
+                }
+
+                // Se temos usuário, pegamos a sessão atual
+                const { data: { session: currentSession } } = await supabase.auth.getSession();
 
                 if (mounted) {
-                    setSession(initialSession);
-                    setLoading(false); 
-                    clearTimeout(safetyTimeout);
+                    setSession(currentSession);
+                    setLoading(false);
 
-                    if (initialSession) {
-                        // Busca perfil em segundo plano
-                        supabase
-                            .from('profiles')
-                            .select('*')
-                            .eq('id', initialSession.user.id)
-                            .single()
-                            .then(({ data }) => {
-                                if (mounted && data) setProfile(data as UserProfile);
-                            });
-                    }
+                    // Busca perfil
+                    const { data: profileData } = await supabase
+                        .from('profiles')
+                        .select('*')
+                        .eq('id', user.id)
+                        .single();
+                    
+                    if (mounted && profileData) setProfile(profileData as UserProfile);
                 }
             } catch (err) {
                 console.error('[AuthContext] Erro na inicialização:', err);
-                if (mounted) {
-                    setLoading(false);
-                    clearTimeout(safetyTimeout);
-                }
+                if (mounted) setLoading(false);
             }
         };
 
@@ -96,9 +78,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
             if (!mounted) return;
-            setSession(currentSession);
             
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                setSession(currentSession);
                 if (currentSession) {
                     const { data } = await supabase
                         .from('profiles')
