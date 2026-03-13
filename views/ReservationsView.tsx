@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { Reservation, ReservationStatus, VehicleChecklist } from '../types';
-import { reservationSchema } from '../schemas/reservation.schema';
+import { Reservation, ReservationStatus, VehicleChecklist, Client, Vehicle } from '../types';
 import { TableSkeleton } from '../components/LoadingSkeleton';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
+import EditReservationModal from '../components/EditReservationModal';
 
 const defaultChecklistItems = ['Lataria', 'Motor', 'Pneus', 'Interior', 'Vidros', 'Acessórios'];
 
 interface ReservationsViewProps {
   reservations: Reservation[];
+  clients: Client[];
+  vehicles: Vehicle[];
   isLoading?: boolean;
   onEmitVoucher: (res: Reservation) => void;
   onAddReservation: (res: Omit<Reservation, 'id'>) => Promise<void>;
@@ -18,6 +20,8 @@ interface ReservationsViewProps {
 
 const ReservationsView: React.FC<ReservationsViewProps> = ({
   reservations,
+  clients,
+  vehicles,
   onEmitVoucher,
   onAddReservation,
   onUpdateReservation,
@@ -256,6 +260,8 @@ const ReservationsView: React.FC<ReservationsViewProps> = ({
       {editingRes && (
         <EditReservationModal
           reservation={editingRes}
+          clients={clients}
+          vehicles={vehicles}
           onClose={() => setEditingRes(null)}
           onUpdate={onUpdateReservation}
         />
@@ -274,200 +280,6 @@ const ReservationsView: React.FC<ReservationsViewProps> = ({
           onUpdate={onUpdateReservation}
         />
       )}
-    </div>
-  );
-};
-
-interface EditReservationModalProps {
-  reservation: Reservation;
-  onClose: () => void;
-  onUpdate: (id: string, updates: Partial<Reservation>) => Promise<void>;
-}
-
-const EditReservationModal: React.FC<EditReservationModalProps> = ({ reservation, onClose, onUpdate }) => {
-  const [formData, setFormData] = useState({
-    status: reservation.status,
-    pickup_date: reservation.pickup_date.split('.')[0].slice(0, 16),
-    return_date: reservation.return_date.split('.')[0].slice(0, 16),
-    daily_rate: reservation.daily_rate,
-    total_value: reservation.total_value,
-    observations: reservation.observations || ''
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.observations.trim()) {
-      toast.error('O campo observações é obrigatório para registrar a alteração.');
-      return;
-    }
-
-    // Calcular dias e preparar dados para validação
-    const pickup = new Date(formData.pickup_date);
-    const returnD = new Date(formData.return_date);
-    const diffTime = Math.abs(returnD.getTime() - pickup.getTime());
-    const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-
-    const dataToValidate = {
-      client_id: reservation.client_id,
-      vehicle_id: reservation.vehicle_id,
-      pickup_date: new Date(formData.pickup_date).toISOString(),
-      return_date: new Date(formData.return_date).toISOString(),
-      daily_rate: formData.daily_rate,
-      security_deposit: reservation.security_deposit,
-      insurance_value: reservation.insurance_value,
-      additional_services: reservation.additional_services,
-      status: formData.status,
-      days,
-      total_value: formData.total_value
-    };
-
-    const validation = reservationSchema.safeParse(dataToValidate);
-
-    if (!validation.success) {
-      const firstError = validation.error.issues[0];
-      toast.error(`${String(firstError.path[0])}: ${firstError.message}`);
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      await onUpdate(reservation.id, {
-        status: formData.status as ReservationStatus,
-        pickup_date: dataToValidate.pickup_date,
-        return_date: dataToValidate.return_date,
-        daily_rate: formData.daily_rate,
-        total_value: formData.total_value,
-        observations: formData.observations
-      });
-      onClose();
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-  const calculateTotals = () => {
-    if (!formData.pickup_date || !formData.return_date) return { days: 0, subtotal: 0 };
-    const pickup = new Date(formData.pickup_date);
-    const returnD = new Date(formData.return_date);
-    const diffTime = Math.abs(returnD.getTime() - pickup.getTime());
-    const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-    const subtotal = days * formData.daily_rate;
-    return { days, subtotal };
-  };
-
-  const { days: currentDays, subtotal: currentSubtotal } = calculateTotals();
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-y-auto max-h-[90vh] animate-in fade-in zoom-in duration-300">
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50 sticky top-0 z-10 backdrop-blur-md">
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">edit</span>
-            Editar Reserva
-          </h2>
-          <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors">
-            <span className="material-symbols-outlined text-slate-400">close</span>
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Status</label>
-              <select
-                className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm"
-                value={formData.status}
-                onChange={e => setFormData({ ...formData, status: e.target.value as any })}
-              >
-                {Object.values(ReservationStatus).map(status => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Data Retirada</label>
-              <input
-                type="datetime-local"
-                className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm"
-                value={formData.pickup_date}
-                onChange={e => setFormData({ ...formData, pickup_date: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Data Devolução</label>
-              <input
-                type="datetime-local"
-                className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm"
-                value={formData.return_date}
-                onChange={e => setFormData({ ...formData, return_date: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Diária</label>
-              <input
-                type="number"
-                className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm"
-                value={formData.daily_rate}
-                onChange={e => setFormData({ ...formData, daily_rate: Number(e.target.value) })}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Valor Total (Global)</label>
-              <input
-                type="number"
-                className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm"
-                value={formData.total_value}
-                onChange={e => setFormData({ ...formData, total_value: Number(e.target.value) })}
-              />
-            </div>
-
-            {/* Resumo em tempo real */}
-            <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
-              <label className="text-[10px] font-black text-primary uppercase block mb-1">Diárias Calculadas</label>
-              <div className="text-sm font-bold text-slate-900 dark:text-white">{currentDays} {currentDays === 1 ? 'dia' : 'dias'}</div>
-            </div>
-
-            <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
-              <label className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase block mb-1">Subtotal Diárias</label>
-              <div className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
-                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(currentSubtotal)}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Observações (Obrigatório)</label>
-            <textarea
-              className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm min-h-[100px]"
-              placeholder="Descreva o motivo da alteração..."
-              value={formData.observations}
-              onChange={e => setFormData({ ...formData, observations: e.target.value })}
-              required
-            ></textarea>
-          </div>
-
-          <div className="flex gap-3 mt-6">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex-1 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:brightness-110 disabled:opacity-50"
-            >
-              {isSubmitting ? 'Salvando...' : 'Salvar Alterações'}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 };

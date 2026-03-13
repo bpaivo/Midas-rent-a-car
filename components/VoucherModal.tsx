@@ -67,7 +67,8 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
     }
   };
 
-  const totalReserva = (reservation.daily_rate * reservation.days) + (reservation.insurance_value || 0);
+  // Usamos o total_value salvo no banco, que já inclui serviços e descontos
+  const totalReserva = reservation.total_value;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 overflow-y-auto no-print">
@@ -227,6 +228,12 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ reservation, client, vehicl
                     </div>
                   </div>
                 </div>
+                {reservation.additional_services && (
+                  <div className="mt-4 px-4">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Serviços Adicionais Contratados</p>
+                    <p className="text-xs font-bold text-slate-700 italic">{reservation.additional_services}</p>
+                  </div>
+                )}
               </section>
             </div>
 

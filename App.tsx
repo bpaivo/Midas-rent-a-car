@@ -172,6 +172,8 @@ const MainContent: React.FC = () => {
           <Route path="/reservations" element={
             <ReservationsView
               reservations={reservations}
+              clients={clients}
+              vehicles={vehicles}
               isLoading={isLoading}
               onEmitVoucher={setSelectedVoucherRes}
               onUpdateReservation={async (id, updates) => {
